@@ -178,29 +178,31 @@ impl From<storage::error::Result<Vec<Slice>>> for Reply {
     }
 }
 
-impl Into<Vec<Vec<u8>>> for Reply {
-    fn into(self) -> Vec<Vec<u8>> {
-        let mut reply: Vec<Vec<u8>> = Vec::new();
+impl Into<Vec<u8>> for Reply {
+    fn into(self) -> Vec<u8> {
+        let mut reply: Vec<u8> = Vec::new();
         match self {
             Reply::StatusReply(status) => {
                 match status {
                     Status::OK => {
-                        reply.push(b"+OK".to_vec());
+                        reply.extend_from_slice(b"+OK\r\n");
                     }
                 }
             }
             Reply::ErrorReply(err) => {
-                reply.push(format!("-{}", err).as_bytes().to_owned());
+                reply.extend_from_slice(format!("-{}\r\n", err).as_bytes());
             }
             Reply::SliceReply(slice) => {
-                reply.push(format!("${}", slice.0.len()).as_bytes().to_owned());
-                reply.push(slice.0);
+                reply.extend_from_slice(format!("${}\r\n", slice.0.len()).as_bytes());
+                reply.extend_from_slice(slice.0.as_slice());
+                reply.extend_from_slice(b"\r\n");
             }
             Reply::MultipleSliceReply(slices) => {
-                reply.push(format!("*{}", slices.len()).as_bytes().to_owned());
+                reply.extend_from_slice(format!("*{}\r\n", slices.len()).as_bytes());
                 for slice in slices {
-                    reply.push(format!("${}", slice.0.len()).as_bytes().to_owned());
-                    reply.push(slice.0);
+                    reply.extend_from_slice(format!("${}\r\n", slice.0.len()).as_bytes());
+                    reply.extend_from_slice(slice.0.as_slice());
+                    reply.extend_from_slice(b"\r\n");
                 }
             }
         }

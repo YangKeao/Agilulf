@@ -8,37 +8,37 @@ pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 pub struct TcpStreamBuffer {
     stream: TcpStream,
-    buffer: Vec<u8>,
+    read_buffer: Vec<u8>,
 
-    pos: usize,
-    cap: usize,
+    read_pos: usize,
+    read_cap: usize,
 }
 
 impl TcpStreamBuffer {
     pub fn new(stream: TcpStream) -> TcpStreamBuffer {
         TcpStreamBuffer {
             stream,
-            buffer: vec![0; DEFAULT_BUF_SIZE],
+            read_buffer: vec![0; DEFAULT_BUF_SIZE],
 
-            cap: DEFAULT_BUF_SIZE,
-            pos: 0,
+            read_cap: DEFAULT_BUF_SIZE,
+            read_pos: 0,
         }
     }
 
     pub async fn fill_buf(&mut self) -> Result<&[u8]> {
-        if self.pos >= self.cap {
-            debug_assert_eq!(self.pos, self.cap);
-            self.cap = self.stream.read(&mut self.buffer).await?;
-            if self.cap == 0 {
+        if self.read_pos >= self.read_cap {
+            debug_assert_eq!(self.read_pos, self.read_cap);
+            self.read_cap = self.stream.read(&mut self.read_buffer).await?;
+            if self.read_cap == 0 {
                 return Err(ProtocolError::ConnectionClosed);
             }
-            self.pos = 0;
+            self.read_pos = 0;
         }
-        Ok(&self.buffer[self.pos..self.cap])
+        Ok(&self.read_buffer[self.read_pos..self.read_cap])
     }
 
     pub fn consume(&mut self, amt: usize) {
-        self.pos = std::cmp::min(self.pos + amt, self.cap);
+        self.read_pos = std::cmp::min(self.read_pos + amt, self.read_cap);
     }
 
     pub async fn read_until(&mut self, delim: (u8, u8)) -> Result<Vec<u8>> {
