@@ -140,12 +140,12 @@ pub async fn read_command(buf: &mut TcpStreamBuffer) -> Result<Command> {
     Ok(Command::new(message)?)
 }
 
-pub enum StatusReply {
+pub enum Status {
     OK,
 }
 
 pub enum Reply {
-    StatusReply(StatusReply),
+    StatusReply(Status),
     ErrorReply(String),
     SliceReply(Slice),
     MultipleSliceReply(Vec<Slice>),
@@ -154,7 +154,7 @@ pub enum Reply {
 impl From<storage::error::Result<()>> for Reply {
     fn from(result: storage::error::Result<()>) -> Self {
         match result {
-            Ok(_) => Reply::StatusReply(StatusReply::OK),
+            Ok(_) => Reply::StatusReply(Status::OK),
             Err(err) => Reply::ErrorReply(err.description().to_string())
         }
     }
@@ -176,6 +176,40 @@ impl From<storage::error::Result<Vec<Slice>>> for Reply {
             Err(err) => Reply::ErrorReply(err.description().to_string())
         }
     }
+}
+
+impl Into<Vec<Vec<u8>>> for Reply {
+    fn into(self) -> Vec<Vec<u8>> {
+        let mut reply: Vec<Vec<u8>> = Vec::new();
+        match self {
+            Reply::StatusReply(status) => {
+                match status {
+                    Status::OK => {
+                        reply.push(b"+OK".to_vec());
+                    }
+                }
+            }
+            Reply::ErrorReply(err) => {
+                reply.push(format!("-{}", err).as_bytes().to_owned());
+            }
+            Reply::SliceReply(slice) => {
+                reply.push(format!("${}", slice.0.len()).as_bytes().to_owned());
+                reply.push(slice.0);
+            }
+            Reply::MultipleSliceReply(slices) => {
+                reply.push(format!("*{}", slices.len()).as_bytes().to_owned());
+                for slice in slices {
+                    reply.push(format!("${}", slice.0.len()).as_bytes().to_owned());
+                    reply.push(slice.0);
+                }
+            }
+        }
+        reply
+    }
+}
+
+fn send_reply(stream: TcpStreamBuffer, reply: Reply) {
+
 }
 
 #[cfg(test)]
