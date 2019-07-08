@@ -10,6 +10,10 @@ quick_error! {
         ParseError(err: std::num::ParseIntError) {
             from()
         }
+        ConnectionClosed
+        IOError(err: std::io::Error) {
+            from()
+        }
     }
 }
 

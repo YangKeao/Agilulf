@@ -8,7 +8,10 @@ use romio::{TcpListener, TcpStream};
 
 use log::{info};
 
-use super::error::Result;
+use super::error::{Result};
+use super::protocol::tcp_buffer::TcpStreamBuffer;
+use super::protocol::read_message;
+use super::protocol::ProtocolError;
 
 pub struct Server {
     addr: SocketAddr,
@@ -18,7 +21,28 @@ pub struct Server {
 async fn handle_stream(stream: TcpStream) -> Result<()> {
     let remote_addr = stream.peer_addr()?; // TODO: handler error here
     info!("Accepting stream from: {}", remote_addr);
-    unimplemented!();
+
+    let mut stream_buffer = TcpStreamBuffer::new(stream);
+    loop {
+        match read_message(&mut stream_buffer).await {
+            Ok(message) => {
+                println!("{:?}", message);
+            }
+            Err(err) => {
+                match err {
+                    ProtocolError::ConnectionClosed => {
+                        // Connection closed
+                        break;
+                    }
+                    _ => {
+                        println!("{:?}", err);
+                        // TODO: handle error here
+                    }
+                }
+            }
+        }
+    }
+
     info!("Closing stream from: {}", remote_addr);
     Ok(())
 }

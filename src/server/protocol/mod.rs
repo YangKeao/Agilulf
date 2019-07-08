@@ -15,12 +15,19 @@ pub struct MessageHead {
 
 impl MessageHead {
     fn new(buf: Vec<u8>) -> Result<MessageHead> {
+        // trim for several \u{0} at start (though I don't know why)
+        let mut buf = &buf[..];
+        while buf[0] == 0 {
+            buf = &buf[1..];
+        }
+
         if buf[0] == '*' as u8 {
             Ok(MessageHead {
-                count: std::str::from_utf8(&buf[1..])?.parse()?,
+                count: std::str::from_utf8(&buf[1..])?.trim().parse()?,
             })
         } else {
-            Err(ProtocolError::GrammarCheckFailed("$ should be the first character of a message"))
+            log::info!("Error buffer is {:?}", std::str::from_utf8(&buf)?);
+            Err(ProtocolError::GrammarCheckFailed("* should be the first character of a message"))
         }
     }
 }
@@ -33,10 +40,10 @@ impl PartHead {
     fn new(buf: Vec<u8>) -> Result<PartHead> {
         if buf[0] == '$' as u8 {
             Ok(PartHead {
-                size: std::str::from_utf8(&buf[1..])?.parse()?,
+                size: std::str::from_utf8(&buf[1..])?.trim().parse()?,
             })
         } else {
-            Err(ProtocolError::GrammarCheckFailed("$ should be the first character of a message"))
+            Err(ProtocolError::GrammarCheckFailed("$ should be the first character of a message part"))
         }
     }
 }
@@ -50,7 +57,8 @@ pub async fn read_message(buf: &mut TcpStreamBuffer) -> Result<Vec<Vec<u8>>> {
     for _ in 0..head.count {
         let part = buf.read_line().await?;
         let head = PartHead::new(part)?;
-        let content = buf.read_exact(head.size).await?;
+        let mut content = buf.read_exact(head.size + 2).await?; // 2 for \r\n
+        let content = content.drain(0..content.len()-2).collect();
 
         message.push(content);
     }

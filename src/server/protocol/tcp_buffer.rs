@@ -1,4 +1,5 @@
 use super::error::Result;
+use crate::server::protocol::ProtocolError;
 use futures::io::AsyncReadExt;
 use futures::Future;
 use romio::TcpStream;
@@ -17,7 +18,7 @@ impl TcpStreamBuffer {
     pub fn new(stream: TcpStream) -> TcpStreamBuffer {
         TcpStreamBuffer {
             stream,
-            buffer: Vec::with_capacity(DEFAULT_BUF_SIZE),
+            buffer: vec![0; DEFAULT_BUF_SIZE],
 
             cap: DEFAULT_BUF_SIZE,
             pos: 0,
@@ -26,8 +27,11 @@ impl TcpStreamBuffer {
 
     pub async fn fill_buf(&mut self) -> Result<&[u8]> {
         if self.pos >= self.cap {
-            debug_assert!(self.pos == self.cap);
-            self.cap = self.stream.read(&mut self.buffer).await.unwrap();
+            debug_assert_eq!(self.pos, self.cap);
+            self.cap = self.stream.read(&mut self.buffer).await?;
+            if self.cap == 0 {
+                return Err(ProtocolError::ConnectionClosed);
+            }
             self.pos = 0;
         }
         Ok(&self.buffer[self.pos..self.cap])
@@ -47,8 +51,8 @@ impl TcpStreamBuffer {
 
                 match memchr::memchr2(delim.0, delim.1, available) {
                     Some(i) => {
-                        buf.extend_from_slice(&available[..=i]);
-                        (true, i + 1)
+                        buf.extend_from_slice(&available[..i + 2]);
+                        (true, i + 2)
                     }
                     None => {
                         buf.extend_from_slice(available);
