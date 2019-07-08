@@ -1,6 +1,6 @@
 use super::error::Result;
 use crate::server::protocol::ProtocolError;
-use futures::io::AsyncReadExt;
+use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::Future;
 use romio::TcpStream;
 
@@ -95,5 +95,10 @@ impl TcpStreamBuffer {
                 return Ok(buf);
             }
         }
+    }
+
+    pub async fn write_all(&mut self, buf: Vec<u8>) -> Result<()> {
+        self.stream.write_all(buf.as_slice()).await?;
+        Ok(())
     }
 }

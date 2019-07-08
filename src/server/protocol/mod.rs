@@ -210,8 +210,9 @@ impl Into<Vec<u8>> for Reply {
     }
 }
 
-fn send_reply(stream: TcpStreamBuffer, reply: Reply) {
-
+fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) {
+    let reply = reply.into();
+    stream.write_all(reply);
 }
 
 #[cfg(test)]
