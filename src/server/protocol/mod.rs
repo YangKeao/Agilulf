@@ -85,9 +85,14 @@ pub struct ScanCommand {
     pub end: Slice,
 }
 
+pub struct DeleteCommand {
+    pub key: Slice,
+}
+
 pub enum Command {
     PUT(PutCommand),
     GET(GetCommand),
+    DELETE(DeleteCommand),
     SCAN(ScanCommand)
 }
 
@@ -115,6 +120,16 @@ impl Command {
                     }))
                 } else {
                     Err(ProtocolError::GrammarCheckFailed("GET should have one argument"))
+                }
+            }
+            "DELETE" => {
+                if message.len() == 2 {
+                    let key = Slice(message.remove(1));
+                    Ok(Command::DELETE(DeleteCommand {
+                        key,
+                    }))
+                } else {
+                    Err(ProtocolError::GrammarCheckFailed("DELETE should have one argument"))
                 }
             }
             "SCAN" => {

@@ -38,4 +38,11 @@ impl Database for MemDatabase {
             .map(|(key, _)| key.clone()) // TODO: clone here may be avoidable
             .collect())
     }
+
+    fn delete(&self, key: Slice) -> Result<()> {
+        match self.inner.write().unwrap().remove(&key) {
+            Some(_) => Ok(()),
+            None => Err(DatabaseError::KeyNotFound),
+        }
+    }
 }

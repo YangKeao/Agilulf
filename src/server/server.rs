@@ -74,7 +74,11 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
                         send_reply(&mut stream_buffer, database.scan(command.start, command.end).into()).await.unwrap();
                         info!("SCAN reply sent");
                     }
-                    _ => {}
+                    Command::DELETE(command) => {
+                        info!("DELETE command received");
+                        send_reply(&mut stream_buffer, database.delete(command.key).into()).await.unwrap();
+                        info!("DELETE reply sent");
+                    }
                 }
             }
             Err(err) => {
