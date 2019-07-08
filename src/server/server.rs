@@ -10,9 +10,8 @@ use log::{info};
 
 use super::error::{Result};
 use super::protocol::tcp_buffer::TcpStreamBuffer;
-use super::protocol::read_message;
+use super::protocol::{read_command, send_reply};
 use super::protocol::ProtocolError;
-use super::protocol::read_command;
 
 use super::Command;
 use crate::storage::Database;
@@ -62,15 +61,18 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
                 match command {
                     Command::GET(command) => {
                         info!("GET command received");
-                        database.get(command.key);
+                        send_reply(&mut stream_buffer, database.get(command.key).into()).await.unwrap(); // TODO: handle this error
+                        info!("GET reply sent");
                     }
                     Command::PUT(command) => {
                         info!("PUT command received");
-                        database.put(command.key, command.value);
+                        send_reply(&mut stream_buffer, database.put(command.key, command.value).into()).await.unwrap();
+                        info!("PUT reply sent");
                     }
                     Command::SCAN(command) => {
                         info!("SCAN command received");
-                        database.scan(command.start, command.end);
+                        send_reply(&mut stream_buffer, database.scan(command.start, command.end).into()).await.unwrap();
+                        info!("SCAN reply sent");
                     }
                     _ => {}
                 }

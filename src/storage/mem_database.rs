@@ -4,20 +4,38 @@ use super::{Database, Slice};
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
-impl Database for RwLock<BTreeMap<Slice, Slice>> {
+pub struct MemDatabase {
+    inner: RwLock<BTreeMap<Slice, Slice>>,
+}
+
+impl MemDatabase {
+    pub fn new() -> MemDatabase {
+        MemDatabase {
+            inner: RwLock::new(BTreeMap::new()),
+        }
+    }
+}
+
+impl Database for MemDatabase {
     fn get(&self, key: Slice) -> Result<Slice> {
-        match self.read().unwrap().get(&key) {
+        match self.inner.read().unwrap().get(&key) {
             Some(value) => Ok(value.clone()), // TODO: clone here may be avoidable
             None => Err(DatabaseError::KeyNotFound),
         }
     }
 
     fn put(&self, key: Slice, value: Slice) -> Result<()> {
-        self.write().unwrap().insert(key, value);
+        self.inner.write().unwrap().insert(key, value);
         Ok(())
     }
 
     fn scan(&self, start: Slice, end: Slice) -> Result<Vec<Slice>> {
-        unimplemented!()
+        Ok(self
+            .inner
+            .read()
+            .unwrap()
+            .range(start..end)
+            .map(|(key, _)| key.clone()) // TODO: clone here may be avoidable
+            .collect())
     }
 }
