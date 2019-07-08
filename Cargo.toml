@@ -1,0 +1,20 @@
+[package]
+name = "Agilulf"
+version = "0.1.0"
+authors = ["Yang Keao <keao.yang@yahoo.com>"]
+edition = "2018"
+
+[lib]
+name = "agilulf"
+path = "src/lib.rs"
+
+[[bin]]
+name = "agilulf_server"
+path = "src/main.rs"
+
+[dependencies]
+romio = "0.3.0-alpha.9"
+quick-error = "1.2.2"
+futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nightly"] }
+log = "0.4"
+env_logger = "0.6.2"
