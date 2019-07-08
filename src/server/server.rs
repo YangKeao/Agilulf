@@ -12,21 +12,68 @@ use super::error::{Result};
 use super::protocol::tcp_buffer::TcpStreamBuffer;
 use super::protocol::read_message;
 use super::protocol::ProtocolError;
+use super::protocol::read_command;
+
+use super::Command;
+use crate::storage::Database;
+use std::sync::Arc;
 
 pub struct Server {
     addr: SocketAddr,
     listener: TcpListener,
+    database: Arc<dyn Database>,
 }
 
-async fn handle_stream(stream: TcpStream) -> Result<()> {
+impl Server {
+    pub fn new(address: &str, database: impl Database + 'static) -> Result<Server> {
+        let addr = address.parse::<SocketAddr>()?;
+        let listener = TcpListener::bind(&addr)?;
+
+        Ok(Server { addr, listener, database: Arc::new(database) })
+    }
+
+    pub fn run(mut self) -> Result<()>{
+        executor::block_on(async {
+            let mut thread_pool = ThreadPool::new().unwrap(); // TODO: handler error here
+
+            let mut incoming = self.listener.incoming();
+            while let Some(stream) = incoming.next().await {
+                let mut stream: TcpStream = stream.unwrap();
+
+                let database = self.database.clone();
+                thread_pool.spawn(async move {
+                    handle_stream(stream, database).await;
+                }).unwrap(); // TODO: handler error here
+            }
+        });
+
+        Ok(())
+    }
+}
+
+async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result<()> {
     let remote_addr = stream.peer_addr()?; // TODO: handler error here
     info!("Accepting stream from: {}", remote_addr);
 
     let mut stream_buffer = TcpStreamBuffer::new(stream);
     loop {
-        match read_message(&mut stream_buffer).await {
-            Ok(message) => {
-                println!("{:?}", message);
+        match read_command(&mut stream_buffer).await {
+            Ok(command) => {
+                match command {
+                    Command::GET(command) => {
+                        info!("GET command received");
+                        database.get(command.key);
+                    }
+                    Command::PUT(command) => {
+                        info!("PUT command received");
+                        database.put(command.key, command.value);
+                    }
+                    Command::SCAN(command) => {
+                        info!("SCAN command received");
+                        database.scan(command.start, command.end);
+                    }
+                    _ => {}
+                }
             }
             Err(err) => {
                 match err {
@@ -45,30 +92,4 @@ async fn handle_stream(stream: TcpStream) -> Result<()> {
 
     info!("Closing stream from: {}", remote_addr);
     Ok(())
-}
-
-impl Server {
-    pub fn new(address: &str) -> Result<Server> {
-        let addr = address.parse::<SocketAddr>()?;
-        let listener = TcpListener::bind(&addr)?;
-
-        Ok(Server { addr, listener })
-    }
-
-    pub fn run(mut self) -> Result<()>{
-        executor::block_on(async {
-            let mut thread_pool = ThreadPool::new().unwrap(); // TODO: handler error here
-
-            let mut incoming = self.listener.incoming();
-            while let Some(stream) = incoming.next().await {
-                let mut stream: TcpStream = stream.unwrap();
-
-                thread_pool.spawn(async move {
-                    handle_stream(stream).await;
-                }).unwrap(); // TODO: handler error here
-            }
-        });
-
-        Ok(())
-    }
 }

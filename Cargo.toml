@@ -19,3 +19,4 @@ futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nig
 log = "0.4"
 env_logger = "0.6.2"
 memchr = "2"
+libc = "0.2.51"

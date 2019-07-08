@@ -4,13 +4,16 @@ quick_error! {
         GrammarCheckFailed(s: &'static str) {
             description(s)
         }
+        ConnectionClosed
+        CommandNotSupport(s: String) {
+            display("Command {} is not supported", s)
+        }
         Utf8Error(err: std::str::Utf8Error) {
             from()
         }
         ParseError(err: std::num::ParseIntError) {
             from()
         }
-        ConnectionClosed
         IOError(err: std::io::Error) {
             from()
         }
