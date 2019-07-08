@@ -18,7 +18,7 @@ pub struct Server {
 async fn handle_stream(stream: TcpStream) -> Result<()> {
     let remote_addr = stream.peer_addr()?; // TODO: handler error here
     info!("Accepting stream from: {}", remote_addr);
-    while stream.read
+    unimplemented!();
     info!("Closing stream from: {}", remote_addr);
     Ok(())
 }
