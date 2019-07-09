@@ -23,7 +23,7 @@ impl MessageHead {
             ))
         }
     }
-    fn into_bytes(self) -> Vec<u8> {
+    pub fn into_bytes(self) -> Vec<u8> {
         format!("*{}\r\n", self.count).into_bytes()
     }
 }
@@ -44,7 +44,7 @@ impl PartHead {
             ))
         }
     }
-    fn into_bytes(self) -> Vec<u8> {
-        format!("*{}\r\n", self.size).into_bytes()
+    pub fn into_bytes(self) -> Vec<u8> {
+        format!("${}\r\n", self.size).into_bytes()
     }
 }

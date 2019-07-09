@@ -135,7 +135,7 @@ impl Into<Vec<u8>> for Command {
                     count: 2
                 }).into_bytes().as_slice());
 
-                message.append_part(b"PUT");
+                message.append_part(b"GET");
                 message.append_part(command.key.0.as_slice());
             }
             Command::DELETE(command) => {

@@ -3,10 +3,12 @@ use super::message::{MessageHead, PartHead};
 use std::error::Error;
 use crate::ProtocolError;
 
+#[derive(PartialEq, Debug)]
 pub enum Status {
     OK,
 }
 
+#[derive(PartialEq, Debug)]
 pub enum Reply {
     StatusReply(Status),
     ErrorReply(String),
@@ -78,7 +80,12 @@ pub async fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) -> Result<()
 }
 
 pub async fn read_reply(buf: &mut TcpStreamBuffer) -> Result<Reply> {
-    let first_line = buf.read_line().await?;
+    let mut first_line = buf.read_line().await?;
+    let mut final_zero = 0;
+    while first_line[final_zero] == 0 {
+        final_zero+=1;
+    }
+    let first_line: Vec<u8> = first_line.drain(final_zero..).collect();
 
     if first_line[0] == b'+' {
         Ok(Reply::StatusReply(Status::OK))
@@ -87,7 +94,7 @@ pub async fn read_reply(buf: &mut TcpStreamBuffer) -> Result<Reply> {
     } else if first_line[0] == b'*' {
         let mut slices = Vec::new();
 
-        let head = MessageHead::from_buf(line)?;
+        let head = MessageHead::from_buf(first_line)?;
         for _ in 0..head.count {
             let part = buf.read_line().await?;
             let head = PartHead::from_buf(part)?;

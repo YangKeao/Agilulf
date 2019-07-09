@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use libc::memcmp;
 
-#[derive(Clone, Eq)]
+#[derive(Clone, Eq, Debug)]
 pub struct Slice(pub Vec<u8>);
 
 impl PartialOrd for Slice {
