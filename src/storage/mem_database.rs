@@ -1,5 +1,5 @@
-use super::error::{DatabaseError, Result};
 use super::{Database, Slice};
+use agilulf_protocol::error::database_error::{DatabaseError, Result};
 
 use std::collections::BTreeMap;
 use std::sync::RwLock;

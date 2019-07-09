@@ -1,16 +1,22 @@
+#![feature(async_await)]
+
+#[macro_use]
+extern crate quick_error;
+
 pub mod error;
-pub mod tcp_buffer;
+mod tcp_buffer;
+mod slice;
+pub mod reply;
+pub use reply::*;
 
-pub use error::ProtocolError;
+pub use error::protocol_error::{Result, ProtocolError};
+pub use slice::Slice;
 
-use error::Result;
-use tcp_buffer::TcpStreamBuffer;
+use error::database_error::{Result as DatabaseResult};
+pub use tcp_buffer::TcpStreamBuffer;
 
 use futures::io::AsyncReadExt;
 use futures::Future;
-
-use crate::storage::Slice;
-use crate::storage;
 
 use std::error::Error;
 
@@ -97,7 +103,7 @@ pub enum Command {
 }
 
 impl Command {
-    fn new(mut message: Vec<Vec<u8>>) -> Result<Command> {
+    fn from_message(mut message: Vec<Vec<u8>>) -> Result<Command> {
         let command = std::str::from_utf8(&message[0])?.to_uppercase();
         match command.as_ref() {
             "PUT" => {
@@ -152,77 +158,7 @@ impl Command {
 pub async fn read_command(buf: &mut TcpStreamBuffer) -> Result<Command> {
     let mut message = read_message(buf).await?;
 
-    Ok(Command::new(message)?)
-}
-
-pub enum Status {
-    OK,
-}
-
-pub enum Reply {
-    StatusReply(Status),
-    ErrorReply(String),
-    SliceReply(Slice),
-    MultipleSliceReply(Vec<Slice>),
-}
-
-impl From<storage::error::Result<()>> for Reply {
-    fn from(result: storage::error::Result<()>) -> Self {
-        match result {
-            Ok(_) => Reply::StatusReply(Status::OK),
-            Err(err) => Reply::ErrorReply(err.description().to_string())
-        }
-    }
-}
-
-impl From<storage::error::Result<Slice>> for Reply {
-    fn from(result: storage::error::Result<Slice>) -> Self {
-        match result {
-            Ok(slice) => Reply::SliceReply(slice),
-            Err(err) => Reply::ErrorReply(err.description().to_string())
-        }
-    }
-}
-
-impl From<storage::error::Result<Vec<Slice>>> for Reply {
-    fn from(result: storage::error::Result<Vec<Slice>>) -> Self {
-        match result {
-            Ok(slices) => Reply::MultipleSliceReply(slices),
-            Err(err) => Reply::ErrorReply(err.description().to_string())
-        }
-    }
-}
-
-impl Into<Vec<u8>> for Reply {
-    fn into(self) -> Vec<u8> {
-        let mut reply: Vec<u8> = Vec::new();
-        match self {
-            Reply::StatusReply(status) => {
-                match status {
-                    Status::OK => {
-                        reply.extend_from_slice(b"+OK\r\n");
-                    }
-                }
-            }
-            Reply::ErrorReply(err) => {
-                reply.extend_from_slice(format!("-{}\r\n", err).as_bytes());
-            }
-            Reply::SliceReply(slice) => {
-                reply.extend_from_slice(format!("${}\r\n", slice.0.len()).as_bytes());
-                reply.extend_from_slice(slice.0.as_slice());
-                reply.extend_from_slice(b"\r\n");
-            }
-            Reply::MultipleSliceReply(slices) => {
-                reply.extend_from_slice(format!("*{}\r\n", slices.len()).as_bytes());
-                for slice in slices {
-                    reply.extend_from_slice(format!("${}\r\n", slice.0.len()).as_bytes());
-                    reply.extend_from_slice(slice.0.as_slice());
-                    reply.extend_from_slice(b"\r\n");
-                }
-            }
-        }
-        reply
-    }
+    Ok(Command::from_message(message)?)
 }
 
 pub async fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) -> Result<()> {

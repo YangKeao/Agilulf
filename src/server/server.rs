@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use futures::executor::{self, ThreadPool};
-use futures::{StreamExt, AsyncReadExt, AsyncWriteExt};
+use futures::{StreamExt};
 use futures::task::{SpawnExt};
 
 use romio::{TcpListener, TcpStream};
@@ -9,16 +9,15 @@ use romio::{TcpListener, TcpStream};
 use log::{info};
 
 use super::error::{Result};
-use super::protocol::tcp_buffer::TcpStreamBuffer;
-use super::protocol::{read_command, send_reply};
-use super::protocol::ProtocolError;
+use agilulf_protocol::TcpStreamBuffer;
+use agilulf_protocol::{read_command, send_reply};
+use agilulf_protocol::ProtocolError;
 
-use super::Command;
+use agilulf_protocol::Command;
 use crate::storage::Database;
 use std::sync::Arc;
 
 pub struct Server {
-    addr: SocketAddr,
     listener: TcpListener,
     database: Arc<dyn Database>,
 }
@@ -28,7 +27,7 @@ impl Server {
         let addr = address.parse::<SocketAddr>()?;
         let listener = TcpListener::bind(&addr)?;
 
-        Ok(Server { addr, listener, database: Arc::new(database) })
+        Ok(Server { listener, database: Arc::new(database) })
     }
 
     pub fn run(mut self) -> Result<()>{
@@ -37,11 +36,11 @@ impl Server {
 
             let mut incoming = self.listener.incoming();
             while let Some(stream) = incoming.next().await {
-                let mut stream: TcpStream = stream.unwrap();
+                let stream: TcpStream = stream.unwrap();
 
                 let database = self.database.clone();
                 thread_pool.spawn(async move {
-                    handle_stream(stream, database).await;
+                    handle_stream(stream, database).await.unwrap(); // TODO: handle error here
                 }).unwrap(); // TODO: handler error here
             }
         });
@@ -51,7 +50,7 @@ impl Server {
 }
 
 async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result<()> {
-    let remote_addr = stream.peer_addr()?; // TODO: handler error here
+    let remote_addr = stream.peer_addr()?; // TODO: handle error here
     info!("Accepting stream from: {}", remote_addr);
 
     let mut stream_buffer = TcpStreamBuffer::new(stream);

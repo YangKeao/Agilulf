@@ -1,7 +1,5 @@
-use super::error::Result;
-use crate::server::protocol::ProtocolError;
+use super::{ProtocolError, Result};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use futures::Future;
 use romio::TcpStream;
 
 pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;

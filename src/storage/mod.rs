@@ -1,10 +1,7 @@
-pub mod error;
 pub mod mem_database;
-mod slice;
+use agilulf_protocol::Slice;
 
-pub use slice::Slice;
-
-use error::Result;
+use agilulf_protocol::error::database_error::Result;
 
 pub trait Database: Send + Sync {
     fn get(&self, key: Slice) -> Result<Slice>;
