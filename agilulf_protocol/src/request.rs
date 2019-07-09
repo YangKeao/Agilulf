@@ -21,6 +21,9 @@ impl MessageHead {
             Err(ProtocolError::GrammarCheckFailed("* should be the first character of a message"))
         }
     }
+    fn into_bytes(self) -> Vec<u8> {
+        format!("*{}\r\n", self.count).into_bytes()
+    }
 }
 
 pub struct PartHead {
@@ -36,6 +39,9 @@ impl PartHead {
         } else {
             Err(ProtocolError::GrammarCheckFailed("$ should be the first character of a message part"))
         }
+    }
+    fn into_bytes(self) -> Vec<u8> {
+        format!("*{}\r\n", self.size).into_bytes()
     }
 }
 
@@ -139,4 +145,62 @@ pub async fn read_command(buf: &mut TcpStreamBuffer) -> Result<Command> {
     let message = read_message(buf).await?;
 
     Ok(Command::from_message(message)?)
+}
+
+trait AppendSlice {
+    fn append_part(&mut self, slice: &[u8]);
+}
+
+impl AppendSlice for Vec<u8> {
+    fn append_part(&mut self, slice: &[u8]) {
+        self.extend_from_slice((PartHead {
+            size: slice.len()
+        }).into_bytes().as_slice());
+        self.extend_from_slice(slice);
+        self.extend_from_slice(b"\r\n");
+    }
+}
+
+impl Into<Vec<u8>> for Command {
+    fn into(self) -> Vec<u8> {
+        let mut message = Vec::new();
+        match self {
+            Command::PUT(command) => {
+                message.extend_from_slice((MessageHead {
+                    count: 3
+                }).into_bytes().as_slice());
+
+                message.append_part(b"PUT");
+                message.append_part(command.key.0.as_slice());
+                message.append_part(command.value.0.as_slice());
+            }
+            Command::GET(command) => {
+                message.extend_from_slice((MessageHead {
+                    count: 2
+                }).into_bytes().as_slice());
+
+                message.append_part(b"PUT");
+                message.append_part(command.key.0.as_slice());
+            }
+            Command::DELETE(command) => {
+                message.extend_from_slice((MessageHead {
+                    count: 2
+                }).into_bytes().as_slice());
+
+                message.append_part(b"DELETE");
+                message.append_part(command.key.0.as_slice());
+            }
+            Command::SCAN(command) => {
+                message.extend_from_slice((MessageHead {
+                    count: 3
+                }).into_bytes().as_slice());
+
+                message.append_part(b"SCAN");
+                message.append_part(command.start.0.as_slice());
+                message.append_part(command.end.0.as_slice());
+            }
+        }
+
+        message
+    }
 }
