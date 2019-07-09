@@ -1,4 +1,4 @@
-use super::{DatabaseResult, Slice};
+use super::{DatabaseResult, Slice, TcpStreamBuffer, Result};
 use std::error::Error;
 
 pub enum Status {
@@ -67,4 +67,10 @@ impl Into<Vec<u8>> for Reply {
         }
         reply
     }
+}
+
+pub async fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) -> Result<()> {
+    let reply = reply.into();
+    stream.write_all(reply).await?;
+    Ok(())
 }

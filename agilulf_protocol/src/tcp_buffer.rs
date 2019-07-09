@@ -42,7 +42,6 @@ impl TcpStreamBuffer {
     pub async fn read_until(&mut self, delim: (u8, u8)) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
-        let mut read = 0;
         loop {
             let (done, used) = {
                 let available = self.fill_buf().await?;
@@ -59,7 +58,6 @@ impl TcpStreamBuffer {
                 }
             };
             self.consume(used);
-            read += used;
 
             if done || used == 0 {
                 return Ok(buf);
