@@ -14,3 +14,4 @@ futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nig
 
 [dev-dependencies]
 agilulf = {path="../"}
+env_logger = "0.6.2"

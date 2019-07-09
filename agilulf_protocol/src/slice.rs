@@ -9,6 +9,8 @@ impl PartialOrd for Slice {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.0.len() < other.0.len() {
             return Some(Ordering::Less);
+        } else if self.0.len() > other.0.len() {
+            return Some(Ordering::Greater);
         } else {
             let res = unsafe {
                 memcmp(

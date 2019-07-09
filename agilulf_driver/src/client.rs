@@ -40,7 +40,6 @@ impl AgilulfClient {
 
     pub async fn send(&mut self, command: Command) -> Result<Reply> {
         let message: Vec<u8> = command.into();
-        println!("{:?}", std::str::from_utf8(message.as_slice()).unwrap());
 
         self.stream.write_all(message).await;
 
@@ -77,6 +76,7 @@ mod test {
     }
 
     async fn setup() -> AgilulfClient {
+        env_logger::init();
         start_server();
         while let Err(e) = AgilulfClient::new("127.0.0.1:3421").await {}
         AgilulfClient::new("127.0.0.1:3421").await.unwrap()
