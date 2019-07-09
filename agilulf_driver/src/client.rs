@@ -58,28 +58,32 @@ mod test {
     use agilulf::{MemDatabase, Server};
     use std::sync::Once;
     use std::thread::JoinHandle;
+    use std::sync::atomic::{AtomicI16, Ordering};
 
-    const ADDRESS: &str = "127.0.0.1:3421";
+    static INIT: Once = Once::new();
+    static SERVER_PORT: AtomicI16 = AtomicI16::new(7000);
 
-    static START_SERVER: Once = Once::new();
-
-    fn start_server() {
-        START_SERVER.call_once(|| {
-            std::thread::spawn(|| {
-                let database = MemDatabase::new();
-                let server = Server::new(ADDRESS, database).unwrap();
-
-                server.run().unwrap();
-            });
+    fn init() {
+        INIT.call_once(|| {
+            env_logger::init();
         });
-
     }
 
     async fn setup() -> AgilulfClient {
-        env_logger::init();
-        start_server();
-        while let Err(e) = AgilulfClient::new("127.0.0.1:3421").await {}
-        AgilulfClient::new("127.0.0.1:3421").await.unwrap()
+        init();
+        let server_port = SERVER_PORT.fetch_add(1, Ordering::Relaxed);
+        let address = format!("127.0.0.1:{}", server_port);
+
+        let cloned_address = address.clone();
+        std::thread::spawn(move || {
+            let database = MemDatabase::new();
+            let server = Server::new(cloned_address.as_str(), database).unwrap();
+
+            server.run().unwrap();
+        });
+
+        while let Err(e) = AgilulfClient::new(address.as_str()).await {}
+        AgilulfClient::new(address.as_str()).await.unwrap()
     }
 
     #[test]
@@ -95,6 +99,74 @@ mod test {
             for i in 0..100 {
                 let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+            }
+        };
+        futures::executor::block_on(future);
+    }
+
+    #[test]
+    fn put_delete_get_test() {
+        let future = async {
+            let mut client = setup().await;
+
+            for i in 0..100 {
+                let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
+                assert_eq!(ans, Reply::StatusReply(Status::OK));
+            }
+
+            for i in 0..100 {
+                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+            }
+
+            for i in 0..100 {
+                if i%2 == 0 {
+                    let ans = client.delete(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                    assert_eq!(ans, Reply::StatusReply(Status::OK));
+                }
+            }
+
+            for i in 0..100 {
+                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                if i % 2 == 0 {
+                    assert_eq!(ans, Reply::ErrorReply(String::from("KeyNotFound\r\n")));
+                } else {
+                    assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                }
+            }
+        };
+        futures::executor::block_on(future);
+    }
+
+    #[test]
+    fn override_test() {
+        let future = async {
+            let mut client = setup().await;
+
+            for i in 0..100 {
+                let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
+                assert_eq!(ans, Reply::StatusReply(Status::OK));
+            }
+
+            for i in 0..100 {
+                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+            }
+
+            for i in 0..100 {
+                if i%2 == 0 {
+                    let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("new_value{}", i).into_bytes())).await.unwrap();
+                    assert_eq!(ans, Reply::StatusReply(Status::OK));
+                }
+            }
+
+            for i in 0..100 {
+                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                if i % 2 == 0 {
+                    assert_eq!(ans, Reply::SliceReply(Slice(format!("new_value{}", i).into_bytes())));
+                } else {
+                    assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                }
             }
         };
         futures::executor::block_on(future);
