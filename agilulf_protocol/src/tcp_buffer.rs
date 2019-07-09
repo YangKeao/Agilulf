@@ -100,7 +100,7 @@ impl TcpStreamBuffer {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use std::sync::Once;
     use futures::executor::{self, ThreadPool};
     use romio::{TcpStream, TcpListener};

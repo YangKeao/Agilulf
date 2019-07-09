@@ -1,7 +1,10 @@
 #![feature(async_await)]
+#![feature(test)]
 
 #[macro_use]
 extern crate quick_error;
+
+extern crate test;
 
 pub mod error;
 mod message;

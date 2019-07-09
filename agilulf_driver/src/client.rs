@@ -51,12 +51,13 @@ impl AgilulfClient {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use agilulf_protocol::Status;
     use agilulf::{MemDatabase, Server};
     use std::sync::Once;
     use std::sync::atomic::{AtomicI16, Ordering};
+    use rand::Rng;
 
     static INIT: Once = Once::new();
     static SERVER_PORT: AtomicI16 = AtomicI16::new(7000);
@@ -172,5 +173,31 @@ mod test {
             }
         };
         futures::executor::block_on(future);
+    }
+
+    #[bench]
+    fn bench_put_request(b: &mut test::Bencher) {
+        use rand::{thread_rng};
+        use rand::distributions::Standard;;
+
+        let mut client = futures::executor::block_on(setup());
+
+        let keys: Vec<Vec<u8>> = (0..100).map(|_| {
+            thread_rng().sample_iter(&Standard).take(8).collect()
+        }).collect();
+
+        let value: Vec<Vec<u8>> = (0..100).map(|_| {
+            thread_rng().sample_iter(&Standard).take(256).collect()
+        }).collect();
+
+        b.iter(|| {
+            let future = async {
+                for index in 0..100 {
+                    client.put(Slice(keys[index].clone()), Slice(value[index].clone())).await.unwrap();
+                }
+            };
+            futures::executor::block_on(future);
+        });
+
     }
 }
