@@ -45,6 +45,24 @@ impl AgilulfClient {
         self.read_reply().await
     }
 
+    pub async fn send_batch(&mut self, commands: Vec<Command>) -> Result<Vec<Reply>> {
+        let len = commands.len();
+        let mut messages = Vec::new();
+
+        for command in commands {
+            let mut message: Vec<u8> = command.into();
+            messages.append(&mut message);
+        }
+
+        self.stream.write_all(messages).await?;
+
+        let mut replies = Vec::new();
+        for _ in 0..len {
+            replies.push(self.read_reply().await?)
+        }
+        Ok(replies)
+    }
+
     pub async fn read_reply(&mut self) -> Result<Reply> {
         Ok(read_reply(&mut self.stream).await?)
     }
@@ -175,6 +193,38 @@ mod tests {
         futures::executor::block_on(future);
     }
 
+    #[test]
+    fn batch_put_request() {
+        use rand::{thread_rng};
+        use rand::distributions::Standard;;
+
+        let future = async {
+            let mut client = setup().await;
+
+            let keys: Vec<Vec<u8>> = (0..500).map(|_| {
+                thread_rng().sample_iter(&Standard).take(8).collect()
+            }).collect();
+
+            let value: Vec<Vec<u8>> = (0..500).map(|_| {
+                thread_rng().sample_iter(&Standard).take(256).collect()
+            }).collect();
+
+            let requests = (0..500).map(|index| {
+                Command::PUT(PutCommand {
+                    key: Slice(keys[index].clone()),
+                    value: Slice(value[index].clone()),
+                })
+            }).collect();
+
+            let replies = client.send_batch(requests).await.unwrap();
+            for reply in replies {
+                assert_eq!(reply, Reply::StatusReply(Status::OK))
+            }
+        };
+
+        futures::executor::block_on(future);
+    }
+
     #[bench]
     fn bench_put_request(b: &mut test::Bencher) {
         use rand::{thread_rng};
@@ -182,21 +232,25 @@ mod tests {
 
         let mut client = futures::executor::block_on(setup());
 
-        let keys: Vec<Vec<u8>> = (0..100).map(|_| {
+        let keys: Vec<Vec<u8>> = (0..1000).map(|_| {
             thread_rng().sample_iter(&Standard).take(8).collect()
         }).collect();
 
-        let value: Vec<Vec<u8>> = (0..100).map(|_| {
+        let value: Vec<Vec<u8>> = (0..1000).map(|_| {
             thread_rng().sample_iter(&Standard).take(256).collect()
         }).collect();
 
+        let requests: Vec<Command> = (0..1000).map(|index| {
+            Command::PUT(PutCommand {
+                key: Slice(keys[index].clone()),
+                value: Slice(value[index].clone()),
+            })
+        }).collect();
+
         b.iter(|| {
-            let future = async {
-                for index in 0..100 {
-                    client.put(Slice(keys[index].clone()), Slice(value[index].clone())).await.unwrap();
-                }
-            };
-            futures::executor::block_on(future);
+            futures::executor::block_on({
+                client.send_batch(requests.clone())
+            }).unwrap();
         });
 
     }

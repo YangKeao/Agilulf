@@ -39,3 +39,32 @@ impl Database for MemDatabase {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agilulf_protocol::Slice;
+
+    #[bench]
+    fn bench_put(b: &mut test::Bencher) {
+        use rand::distributions::Standard;
+        use rand::{thread_rng, Rng};;
+
+        let db = MemDatabase::default();
+
+        let keys: Vec<Vec<u8>> = (0..1000)
+            .map(|_| thread_rng().sample_iter(&Standard).take(8).collect())
+            .collect();
+
+        let value: Vec<Vec<u8>> = (0..1000)
+            .map(|_| thread_rng().sample_iter(&Standard).take(256).collect())
+            .collect();
+
+        b.iter(|| {
+            for index in 0..1000 {
+                db.put(Slice(keys[index].clone()), Slice(value[index].clone()))
+                    .unwrap();
+            }
+        })
+    }
+}

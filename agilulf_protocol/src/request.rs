@@ -19,24 +19,29 @@ pub async fn read_message(buf: &mut TcpStreamBuffer) -> Result<Vec<Vec<u8>>> {
     Ok(message)
 }
 
+#[derive(Clone)]
 pub struct PutCommand {
     pub key: Slice,
     pub value: Slice
 }
 
+#[derive(Clone)]
 pub struct GetCommand {
     pub key: Slice
 }
 
+#[derive(Clone)]
 pub struct ScanCommand {
     pub start: Slice,
     pub end: Slice,
 }
 
+#[derive(Clone)]
 pub struct DeleteCommand {
     pub key: Slice,
 }
 
+#[derive(Clone)]
 pub enum Command {
     PUT(PutCommand),
     GET(GetCommand),
