@@ -7,14 +7,13 @@ use agilulf_protocol::{
 use romio::TcpStream;
 
 use super::error::{Result};
-use futures::io::AsyncWriteExt;
 
 pub struct AgilulfClient {
     stream: TcpStreamBuffer,
 }
 
 impl AgilulfClient {
-    pub async fn new(address: &str) -> Result<AgilulfClient> {
+    pub async fn connect(address: &str) -> Result<AgilulfClient> {
         let addr = address.parse::<SocketAddr>()?;
         let stream = TcpStream::connect(&addr).await?;
         let stream = TcpStreamBuffer::new(stream);
@@ -41,7 +40,7 @@ impl AgilulfClient {
     pub async fn send(&mut self, command: Command) -> Result<Reply> {
         let message: Vec<u8> = command.into();
 
-        self.stream.write_all(message).await;
+        self.stream.write_all(message).await?;
 
         self.read_reply().await
     }
@@ -57,7 +56,6 @@ mod test {
     use agilulf_protocol::Status;
     use agilulf::{MemDatabase, Server};
     use std::sync::Once;
-    use std::thread::JoinHandle;
     use std::sync::atomic::{AtomicI16, Ordering};
 
     static INIT: Once = Once::new();
@@ -76,14 +74,18 @@ mod test {
 
         let cloned_address = address.clone();
         std::thread::spawn(move || {
-            let database = MemDatabase::new();
+            let database = MemDatabase::default();
             let server = Server::new(cloned_address.as_str(), database).unwrap();
 
             server.run().unwrap();
         });
 
-        while let Err(e) = AgilulfClient::new(address.as_str()).await {}
-        AgilulfClient::new(address.as_str()).await.unwrap()
+        loop {
+            match AgilulfClient::connect(address.as_str()).await {
+                Err(_) => {},
+                Ok(client) => return client,
+            }
+        }
     }
 
     #[test]

@@ -80,7 +80,7 @@ pub async fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) -> Result<()
 }
 
 pub async fn read_reply(buf: &mut TcpStreamBuffer) -> Result<Reply> {
-    let mut first_line = buf.read_line().await?;
+    let first_line = buf.read_line().await?;
 
     if first_line[0] == b'+' {
         Ok(Reply::StatusReply(Status::OK))

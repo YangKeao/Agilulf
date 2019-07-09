@@ -4,16 +4,9 @@ use agilulf_protocol::error::database_error::{DatabaseError, Result};
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
+#[derive(Default)]
 pub struct MemDatabase {
     inner: RwLock<BTreeMap<Slice, Slice>>,
-}
-
-impl MemDatabase {
-    pub fn new() -> MemDatabase {
-        MemDatabase {
-            inner: RwLock::new(BTreeMap::new()),
-        }
-    }
 }
 
 impl Database for MemDatabase {

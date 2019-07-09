@@ -6,7 +6,7 @@ pub struct MessageHead {
 
 impl MessageHead {
     pub fn from_buf(buf: Vec<u8>) -> Result<MessageHead> {
-        if buf[0] == '*' as u8 {
+        if buf[0] == b'*' {
             Ok(MessageHead {
                 count: std::str::from_utf8(&buf[1..])?.trim().parse()?,
             })
@@ -28,7 +28,7 @@ pub struct PartHead {
 
 impl PartHead {
     pub fn from_buf(buf: Vec<u8>) -> Result<PartHead> {
-        if buf[0] == '$' as u8 {
+        if buf[0] == b'$' {
             Ok(PartHead {
                 size: std::str::from_utf8(&buf[1..])?.trim().parse()?,
             })

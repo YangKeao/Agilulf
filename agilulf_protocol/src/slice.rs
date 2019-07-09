@@ -8,9 +8,9 @@ pub struct Slice(pub Vec<u8>);
 impl PartialOrd for Slice {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.0.len() < other.0.len() {
-            return Some(Ordering::Less);
+            Some(Ordering::Less)
         } else if self.0.len() > other.0.len() {
-            return Some(Ordering::Greater);
+            Some(Ordering::Greater)
         } else {
             let res = unsafe {
                 memcmp(
@@ -20,11 +20,11 @@ impl PartialOrd for Slice {
                 )
             };
             if res == 0 {
-                return Some(Ordering::Equal);
+                Some(Ordering::Equal)
             } else if res < 0 {
-                return Some(Ordering::Less);
+                Some(Ordering::Less)
             } else {
-                return Some(Ordering::Greater);
+                Some(Ordering::Greater)
             }
         }
     }

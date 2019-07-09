@@ -66,7 +66,7 @@ impl TcpStreamBuffer {
     }
 
     pub async fn read_line(&mut self) -> Result<Vec<u8>> {
-        self.read_until(('\r' as u8, '\n' as u8)).await
+        self.read_until((b'\r', b'\n')).await
     }
 
     pub async fn read_exact(&mut self, size: usize) -> Result<Vec<u8>> {
