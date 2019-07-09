@@ -98,3 +98,68 @@ impl TcpStreamBuffer {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::sync::Once;
+    use futures::executor::{self, ThreadPool};
+    use romio::{TcpStream, TcpListener};
+    use futures::task::SpawnExt;
+    use std::net::SocketAddr;
+    use futures::{StreamExt, AsyncWriteExt};
+    use crate::TcpStreamBuffer;
+
+    const ADDRESS: &str = "127.0.0.1:7999";
+    static START_SERVER: Once = Once::new();
+
+    async fn start_server() -> TcpStream {
+        START_SERVER.call_once(|| {
+            std::thread::spawn(|| {
+                executor::block_on(async {
+                    let mut thread_pool = ThreadPool::new().unwrap();
+
+                    let addr = ADDRESS.parse::<SocketAddr>().unwrap();
+                    let mut listener = TcpListener::bind(&addr).unwrap();
+
+                    let mut incoming = listener.incoming();
+
+                    while let Some(stream) = incoming.next().await {
+                        let mut stream: TcpStream = stream.unwrap();
+
+                        thread_pool.spawn(async move {
+                            stream.write_all(b"TEST LINE 1\r\nTESTTESTTEST\r\n").await.unwrap();
+                            std::mem::forget(stream);
+                        }).unwrap();
+                    }
+                });
+            });
+        });
+        let addr = ADDRESS.parse::<SocketAddr>().unwrap();
+        loop {
+            match TcpStream::connect(&addr).await {
+                Err(_) => {},
+                Ok(stream) => return stream
+            }
+        }
+    }
+
+    #[test]
+    fn read_line() {
+        let future = async {
+            let stream = start_server().await;
+            let mut buffer = TcpStreamBuffer::new(stream);
+
+            let mut line = buffer.read_line().await.unwrap();
+            let mut final_zero = 0;
+            while line[final_zero] == 0 {
+                final_zero+=1;
+            }
+            let line: Vec<u8> = line.drain(final_zero..).collect();
+
+            let line = std::str::from_utf8(line.as_slice()).unwrap();
+            assert_eq!(line, "TEST LINE 1\r\n");
+        };
+
+        futures::executor::block_on(future);
+    }
+}

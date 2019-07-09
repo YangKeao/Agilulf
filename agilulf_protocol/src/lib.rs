@@ -3,9 +3,6 @@
 #[macro_use]
 extern crate quick_error;
 
-#[macro_use]
-extern crate futures;
-
 pub mod error;
 mod message;
 pub mod reply;
