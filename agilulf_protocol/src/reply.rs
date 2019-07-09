@@ -81,11 +81,6 @@ pub async fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) -> Result<()
 
 pub async fn read_reply(buf: &mut TcpStreamBuffer) -> Result<Reply> {
     let mut first_line = buf.read_line().await?;
-    let mut final_zero = 0;
-    while first_line[final_zero] == 0 {
-        final_zero+=1;
-    }
-    let first_line: Vec<u8> = first_line.drain(final_zero..).collect();
 
     if first_line[0] == b'+' {
         Ok(Reply::StatusReply(Status::OK))

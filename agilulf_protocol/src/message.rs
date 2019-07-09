@@ -6,12 +6,6 @@ pub struct MessageHead {
 
 impl MessageHead {
     pub fn from_buf(buf: Vec<u8>) -> Result<MessageHead> {
-        // trim for several \u{0} at start (though I don't know why)
-        let mut buf = &buf[..];
-        while buf[0] == 0 {
-            buf = &buf[1..];
-        }
-
         if buf[0] == '*' as u8 {
             Ok(MessageHead {
                 count: std::str::from_utf8(&buf[1..])?.trim().parse()?,

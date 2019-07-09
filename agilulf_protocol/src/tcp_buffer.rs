@@ -18,7 +18,7 @@ impl TcpStreamBuffer {
             stream,
             read_buffer: vec![0; DEFAULT_BUF_SIZE],
 
-            read_cap: DEFAULT_BUF_SIZE,
+            read_cap: 0,
             read_pos: 0,
         }
     }
@@ -150,11 +150,6 @@ mod test {
             let mut buffer = TcpStreamBuffer::new(stream);
 
             let mut line = buffer.read_line().await.unwrap();
-            let mut final_zero = 0;
-            while line[final_zero] == 0 {
-                final_zero+=1;
-            }
-            let line: Vec<u8> = line.drain(final_zero..).collect();
 
             let line = std::str::from_utf8(line.as_slice()).unwrap();
             assert_eq!(line, "TEST LINE 1\r\n");
