@@ -201,15 +201,15 @@ mod tests {
         let future = async {
             let mut client = setup().await;
 
-            let keys: Vec<Vec<u8>> = (0..500).map(|_| {
+            let keys: Vec<Vec<u8>> = (0..1000).map(|_| {
                 thread_rng().sample_iter(&Standard).take(8).collect()
             }).collect();
 
-            let value: Vec<Vec<u8>> = (0..500).map(|_| {
+            let value: Vec<Vec<u8>> = (0..1000).map(|_| {
                 thread_rng().sample_iter(&Standard).take(256).collect()
             }).collect();
 
-            let requests = (0..500).map(|index| {
+            let requests = (0..1000).map(|index| {
                 Command::PUT(PutCommand {
                     key: Slice(keys[index].clone()),
                     value: Slice(value[index].clone()),
@@ -223,35 +223,5 @@ mod tests {
         };
 
         futures::executor::block_on(future);
-    }
-
-    #[bench]
-    fn bench_put_request(b: &mut test::Bencher) {
-        use rand::{thread_rng};
-        use rand::distributions::Standard;;
-
-        let mut client = futures::executor::block_on(setup());
-
-        let keys: Vec<Vec<u8>> = (0..1000).map(|_| {
-            thread_rng().sample_iter(&Standard).take(8).collect()
-        }).collect();
-
-        let value: Vec<Vec<u8>> = (0..1000).map(|_| {
-            thread_rng().sample_iter(&Standard).take(256).collect()
-        }).collect();
-
-        let requests: Vec<Command> = (0..1000).map(|index| {
-            Command::PUT(PutCommand {
-                key: Slice(keys[index].clone()),
-                value: Slice(value[index].clone()),
-            })
-        }).collect();
-
-        b.iter(|| {
-            futures::executor::block_on({
-                client.send_batch(requests.clone())
-            }).unwrap();
-        });
-
     }
 }
