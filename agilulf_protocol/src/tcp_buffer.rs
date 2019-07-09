@@ -149,10 +149,29 @@ mod test {
             let stream = start_server().await;
             let mut buffer = TcpStreamBuffer::new(stream);
 
-            let mut line = buffer.read_line().await.unwrap();
-
+            let line = buffer.read_line().await.unwrap();
             let line = std::str::from_utf8(line.as_slice()).unwrap();
             assert_eq!(line, "TEST LINE 1\r\n");
+        };
+
+        futures::executor::block_on(future);
+    }
+
+    #[test]
+    fn read_exact() {
+        let future = async {
+            let stream = start_server().await;
+            let mut buffer = TcpStreamBuffer::new(stream);
+
+            let exact = buffer.read_exact(8).await.unwrap();
+            let exact = std::str::from_utf8(exact.as_slice()).unwrap();
+            assert_eq!(exact, "TEST LIN");
+
+            buffer.read_line().await.unwrap();
+
+            let exact = buffer.read_exact(8).await.unwrap();
+            let exact = std::str::from_utf8(exact.as_slice()).unwrap();
+            assert_eq!(exact, "TESTTEST");
         };
 
         futures::executor::block_on(future);
