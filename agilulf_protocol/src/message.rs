@@ -42,3 +42,45 @@ impl PartHead {
         format!("${}\r\n", self.size).into_bytes()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::error::Error;
+
+    #[test]
+    fn message_head() {
+        let message_head = MessageHead::from_buf(b"*100\r\n".to_vec()).unwrap();
+        assert_eq!(message_head.count, 100);
+        assert_eq!(message_head.into_bytes(), b"*100\r\n".to_vec());
+    }
+
+    #[test]
+    fn part_head() {
+        let part_head = PartHead::from_buf(b"$100\r\n".to_vec()).unwrap();
+        assert_eq!(part_head.size, 100);
+        assert_eq!(part_head.into_bytes(), b"$100\r\n".to_vec());
+    }
+
+    #[test]
+    fn wrong_message_head() {
+        match MessageHead::from_buf(b"$100\r\r".to_vec()) {
+            Err(err) => assert_eq!(
+                err.description(),
+                "* should be the first character of a message"
+            ),
+            Ok(_) => assert!(false, "should throw an error"),
+        }
+    }
+
+    #[test]
+    fn wrong_part_head() {
+        match PartHead::from_buf(b"*100\r\r".to_vec()) {
+            Err(err) => assert_eq!(
+                err.description(),
+                "$ should be the first character of a message part"
+            ),
+            Ok(_) => assert!(false, "should throw an error"),
+        }
+    }
+}
