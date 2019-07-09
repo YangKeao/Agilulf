@@ -4,6 +4,7 @@
 extern crate quick_error;
 
 pub mod error;
+mod message;
 pub mod reply;
 pub mod request;
 

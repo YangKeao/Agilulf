@@ -1,5 +1,7 @@
 use super::{DatabaseResult, Slice, TcpStreamBuffer, Result};
+use super::message::{MessageHead, PartHead};
 use std::error::Error;
+use crate::ProtocolError;
 
 pub enum Status {
     OK,
@@ -73,4 +75,36 @@ pub async fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) -> Result<()
     let reply = reply.into();
     stream.write_all(reply).await?;
     Ok(())
+}
+
+pub async fn read_reply(buf: &mut TcpStreamBuffer) -> Result<Reply> {
+    let first_line = buf.read_line().await?;
+
+    if first_line[0] == b'+' {
+        Ok(Reply::StatusReply(Status::OK))
+    } else if first_line[0] == b'-' {
+        Ok(Reply::ErrorReply(std::str::from_utf8(&first_line[1..])?.to_owned()))
+    } else if first_line[0] == b'*' {
+        let mut slices = Vec::new();
+
+        let head = MessageHead::from_buf(line)?;
+        for _ in 0..head.count {
+            let part = buf.read_line().await?;
+            let head = PartHead::from_buf(part)?;
+            let mut content = buf.read_exact(head.size + 2).await?; // 2 for \r\n
+            let content = content.drain(0..content.len()-2).collect();
+
+            slices.push(Slice(content));
+        }
+
+        Ok(Reply::MultipleSliceReply(slices))
+    } else if first_line[0] == b'$' {
+        let head = PartHead::from_buf(first_line)?;
+        let mut content = buf.read_exact(head.size + 2).await?; // 2 for \r\n
+        let content = content.drain(0..content.len()-2).collect();
+
+        Ok(Reply::SliceReply(Slice(content)))
+    } else {
+        Err(ProtocolError::GrammarCheckFailed("Reply Grammar Error"))
+    }
 }
