@@ -111,33 +111,62 @@ impl MultiAgilulfClient {
             knights
         })
     }
-    pub fn allocate_task(&self, key: &Slice) -> usize {
+    fn hash_key(key: &Slice) -> usize {
         let mut hasher = fnv::FnvHasher::default();
         key.0.hash(&mut hasher);
-        hasher.finish() as usize % self.knights.len()
+        hasher.finish() as usize
     }
+    pub fn allocate_task(&self, command: &Command) -> usize {
+        match command {
+            Command::PUT(command) => {
+                Self::hash_key(&command.key) % self.knights.len()
+            }
+            Command::DELETE(command) => {
+                Self::hash_key(&command.key) % self.knights.len()
+            }
+            Command::GET(command) => {
+                Self::hash_key(&command.key) % self.knights.len()
+            }
+            Command::SCAN(command) => {
+                Self::hash_key(&command.start) % self.knights.len() // TODO: Add Barrier here
+            }
+        }
+    }
+
     pub async fn put(&self, key: Slice, value: Slice) -> Result<Reply> {
-        let id = self.allocate_task(&key);
-        self.send(Command::PUT(PutCommand { key, value }), id).await
+        self.send(Command::PUT(PutCommand { key, value })).await
     }
 
     pub async fn get(&self, key: Slice) -> Result<Reply> {
-        let id = self.allocate_task(&key);
-        self.send(Command::GET(GetCommand { key }), id).await
+        self.send(Command::GET(GetCommand { key })).await
     }
 
     pub async fn delete(&self, key: Slice) -> Result<Reply> {
-        let id = self.allocate_task(&key);
-        self.send(Command::DELETE(DeleteCommand { key }), id).await
+        self.send(Command::DELETE(DeleteCommand { key })).await
     }
 
     pub async fn scan(&self, start: Slice, end: Slice) -> Result<Reply> {
-        let id = self.allocate_task(&start);
-        self.send(Command::SCAN(ScanCommand { start, end }), id).await // TODO: need barrier for safety of scan.
+        self.send(Command::SCAN(ScanCommand { start, end })).await // TODO: need barrier for safety of scan.
     }
 
-    pub async fn send(&self, command: Command, knight_id: usize) -> Result<Reply> {
+    pub async fn send(&self, command: Command) -> Result<Reply> {
+        let knight_id = self.allocate_task(&command);
         self.knights[knight_id].send(command).await
+    }
+
+    pub async fn send_batch(&self, commands: Vec<Command>) -> Result<Vec<Reply>> {
+        let knight_ids: Vec<usize> = commands.iter().map(|command| self.allocate_task(command)).collect();
+
+        let mut futures = Vec::new();
+        for (index, command) in commands.into_iter().enumerate() {
+            futures.push(self.knights[knight_ids[index]].send(command));
+        }
+
+        let mut replies = Vec::new();
+        for res in futures::future::join_all(futures).await {
+            replies.push(res?);
+        }
+        Ok(replies)
     }
 }
 
@@ -379,19 +408,41 @@ mod tests {
 
     #[bench]
     fn multi_knights_bench(b: &mut test::Bencher) {
-        let keys = generate_keys(1000);
-        let values = generate_values(1000);
+        let requests = generate_request(1000);
 
         run_test(async move |port, mut thread_pool| {
             let client = multi_connect(port, 4).await;
             let (sender, receiver) = crossbeam_channel::unbounded::<()>();
             thread_pool.spawn(async move {
-                let mut keys = keys.iter().cycle();
-                let mut values = values.iter().cycle();
+                let mut requests = requests.iter().cycle();
                 loop {
                     for _ in 0..1000 {
-                        client.put(Slice(keys.next().unwrap().clone()), Slice(values.next().unwrap().clone())).await.unwrap();
+                        client.send(requests.next().unwrap().clone()).await.unwrap();
                     }
+                    sender.send(()).unwrap();
+                }
+            }).unwrap();
+
+            b.iter(|| {
+                receiver.recv().unwrap();
+            })
+        });
+    }
+
+    #[bench]
+    fn multi_thread_batch_bench(b: &mut test::Bencher) {
+        let requests = generate_request(1000);
+
+        run_test(async move |port, mut thread_pool| {
+            let client = multi_connect(port, 128).await;
+            let (sender, receiver) = crossbeam_channel::unbounded::<()>();
+
+            let client = client.clone();
+            let requests = requests.clone();
+            let sender = sender.clone();
+            thread_pool.spawn(async move {
+                loop {
+                    client.send_batch(requests.to_vec()).await.unwrap();
                     sender.send(()).unwrap();
                 }
             }).unwrap();
