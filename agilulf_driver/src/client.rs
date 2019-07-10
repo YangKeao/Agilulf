@@ -1,16 +1,15 @@
 use std::net::SocketAddr;
 
-use agilulf_protocol::{
-    read_reply, Command, DeleteCommand, GetCommand, PutCommand, Reply, ScanCommand, Slice,
-    AsyncReadBuffer, AsyncWriteBuffer
-};
+use agilulf_protocol::{read_reply, Command, DeleteCommand, GetCommand, PutCommand, Reply, ScanCommand, Slice, AsyncReadBuffer, AsyncWriteBuffer, ProtocolError};
 use romio::TcpStream;
 
 use super::error::{Result};
-use futures::io::{AsyncReadExt, ReadHalf, WriteHalf};
+use futures::io::{AsyncReadExt, WriteHalf};
+use futures::channel::mpsc::{self, UnboundedReceiver};
+use futures::{SinkExt, StreamExt};
 
 pub struct AgilulfClient {
-    read_stream: AsyncReadBuffer<ReadHalf<TcpStream>>,
+    reply_receiver: UnboundedReceiver<std::result::Result<Reply, ProtocolError>>,
     write_stream: AsyncWriteBuffer<WriteHalf<TcpStream>>,
 }
 
@@ -19,10 +18,23 @@ impl AgilulfClient {
         let addr = address.parse::<SocketAddr>()?;
         let stream = TcpStream::connect(&addr).await?;
         let (reader, writer) = stream.split();
+        let write_stream = AsyncWriteBuffer::new(writer);
+
+        let (mut reply_sender, reply_receiver) = mpsc::unbounded();
+        std::thread::spawn(move || {
+            let reply_future = async move {
+                let mut reader = AsyncReadBuffer::new(reader);
+                loop  {
+                    let reply = read_reply(&mut reader).await;
+                    reply_sender.send(reply).await.unwrap(); // TODO: handle error here
+                }
+            };
+            futures::executor::block_on(reply_future);
+        });
 
         Ok(AgilulfClient {
-            read_stream: AsyncReadBuffer::new(reader),
-            write_stream: AsyncWriteBuffer::new(writer)
+            reply_receiver,
+            write_stream,
         })
     }
 
@@ -69,7 +81,7 @@ impl AgilulfClient {
     }
 
     pub async fn read_reply(&mut self) -> Result<Reply> {
-        Ok(read_reply(&mut self.read_stream).await?)
+        Ok(self.reply_receiver.select_next_some().await?)
     }
 }
 

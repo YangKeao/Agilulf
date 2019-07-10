@@ -1,6 +1,5 @@
 use super::{ProtocolError, Result};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use romio::TcpStream;
 use futures::{AsyncRead, AsyncWrite};
 
 pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
