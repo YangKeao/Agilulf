@@ -31,19 +31,23 @@ impl Server {
         Ok(Server { listener, database: Arc::new(database) })
     }
 
+    pub async fn run_async(mut self) {
+        let mut thread_pool = ThreadPool::new().unwrap(); // TODO: handler error here
+
+        let mut incoming = self.listener.incoming();
+        while let Some(stream) = incoming.next().await {
+            let stream: TcpStream = stream.unwrap();
+
+            let database = self.database.clone();
+            thread_pool.spawn(async move {
+                handle_stream(stream, database).await.unwrap(); // TODO: handle error here
+            }).unwrap(); // TODO: handler error here
+        }
+    }
+
     pub fn run(mut self) -> Result<()>{
         executor::block_on(async {
-            let mut thread_pool = ThreadPool::new().unwrap(); // TODO: handler error here
-
-            let mut incoming = self.listener.incoming();
-            while let Some(stream) = incoming.next().await {
-                let stream: TcpStream = stream.unwrap();
-
-                let database = self.database.clone();
-                thread_pool.spawn(async move {
-                    handle_stream(stream, database).await.unwrap(); // TODO: handle error here
-                }).unwrap(); // TODO: handler error here
-            }
+            self.run_async().await
         });
 
         Ok(())

@@ -7,6 +7,7 @@ use super::error::{Result};
 use futures::io::{AsyncReadExt, WriteHalf};
 use futures::channel::mpsc::{self, UnboundedReceiver};
 use futures::{SinkExt, StreamExt};
+use futures::lock::Mutex;
 
 pub struct AgilulfClient {
     reply_receiver: UnboundedReceiver<std::result::Result<Reply, ProtocolError>>,
@@ -90,9 +91,13 @@ mod tests {
     use super::*;
     use agilulf_protocol::Status;
     use agilulf::{MemDatabase, Server};
-    use std::sync::Once;
+    use std::sync::{Once, Arc};
     use std::sync::atomic::{AtomicI16, Ordering};
-    use rand::Rng;
+    use futures::executor::ThreadPool;
+    use futures::task::{SpawnExt};
+    use futures::Future;
+    use rand::{Rng, thread_rng};
+    use rand::distributions::Standard;
 
     static INIT: Once = Once::new();
     static SERVER_PORT: AtomicI16 = AtomicI16::new(7000);
@@ -103,19 +108,21 @@ mod tests {
         });
     }
 
-    async fn setup() -> AgilulfClient {
+    fn setup_server(executor: &mut ThreadPool) -> i16 {
         init();
         let server_port = SERVER_PORT.fetch_add(1, Ordering::Relaxed);
         let address = format!("127.0.0.1:{}", server_port);
 
-        let cloned_address = address.clone();
-        std::thread::spawn(move || {
-            let database = MemDatabase::default();
-            let server = Server::new(cloned_address.as_str(), database).unwrap();
+        let database = MemDatabase::default();
+        let server = Server::new(address.as_str(), database).unwrap();
 
-            server.run().unwrap();
-        });
+        executor.spawn(server.run_async()).unwrap();
 
+        return server_port;
+    }
+
+    async fn connect(server_port: i16) -> AgilulfClient {
+        let address = format!("127.0.0.1:{}", server_port);
         loop {
             match AgilulfClient::connect(address.as_str()).await {
                 Err(_) => {},
@@ -124,11 +131,25 @@ mod tests {
         }
     }
 
+    fn run_test<F, Fut >(f: F)
+        where F: FnOnce(AgilulfClient, ThreadPool) -> Fut + Send + Sync,
+              Fut: Future<Output=()> + Send {
+        let mut thread_pool = ThreadPool::builder()
+            .name_prefix("test_thread").create().unwrap();
+
+        let port = setup_server(&mut thread_pool);
+
+        let extra_thread_pool = thread_pool.clone();
+
+        thread_pool.run(async move {
+            let client = connect(port.clone()).await;
+            f(client, extra_thread_pool).await;
+        });
+    }
+
     #[test]
     fn put_get_test() {
-        let future = async {
-            let mut client = setup().await;
-
+        run_test(async move |mut client, mut thread_pool| {
             for i in 0..100 {
                 let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
@@ -138,15 +159,12 @@ mod tests {
                 let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
             }
-        };
-        futures::executor::block_on(future);
+        });
     }
 
     #[test]
     fn put_delete_get_test() {
-        let future = async {
-            let mut client = setup().await;
-
+        run_test(async move |mut client, mut thread_pool| {
             for i in 0..100 {
                 let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
@@ -172,15 +190,12 @@ mod tests {
                     assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
                 }
             }
-        };
-        futures::executor::block_on(future);
+        });
     }
 
     #[test]
     fn override_test() {
-        let future = async {
-            let mut client = setup().await;
-
+        run_test(async move |mut client, mut thread_pool| {
             for i in 0..100 {
                 let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
@@ -206,69 +221,49 @@ mod tests {
                     assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
                 }
             }
-        };
-        futures::executor::block_on(future);
+        });
     }
 
-    #[test]
-    fn batch_put_request() {
-        use rand::{thread_rng};
-        use rand::distributions::Standard;;
-
-        let future = async {
-            let mut client = setup().await;
-
-            let keys: Vec<Vec<u8>> = (0..1000).map(|_| {
-                thread_rng().sample_iter(&Standard).take(8).collect()
-            }).collect();
-
-            let value: Vec<Vec<u8>> = (0..1000).map(|_| {
-                thread_rng().sample_iter(&Standard).take(256).collect()
-            }).collect();
-
-            let requests = (0..1000).map(|index| {
-                Command::PUT(PutCommand {
-                    key: Slice(keys[index].clone()),
-                    value: Slice(value[index].clone()),
-                })
-            }).collect();
-
-            let replies = client.send_batch(requests).await.unwrap();
-            for reply in replies {
-                assert_eq!(reply, Reply::StatusReply(Status::OK))
-            }
-        };
-
-        futures::executor::block_on(future);
-    }
-
-    #[bench]
-    fn single_thread_bench(b: &mut test::Bencher) {
-        use rand::{thread_rng};
-        use rand::distributions::Standard;;
-
-        let keys: Vec<Vec<u8>> = (0..10000).map(|_| {
+    fn generate_request(num: usize) -> Vec<Command> {
+        let keys: Vec<Vec<u8>> = (0..num).map(|_| {
             thread_rng().sample_iter(&Standard).take(8).collect()
         }).collect();
 
-        let value: Vec<Vec<u8>> = (0..10000).map(|_| {
+        let value: Vec<Vec<u8>> = (0..num).map(|_| {
             thread_rng().sample_iter(&Standard).take(256).collect()
         }).collect();
 
-        let requests: Vec<Command> = (0..10000).map(|index| {
+        (0..num).map(|index| {
             Command::PUT(PutCommand {
                 key: Slice(keys[index].clone()),
                 value: Slice(value[index].clone()),
             })
-        }).collect();
+        }).collect()
+    }
 
-        let mut client = futures::executor::block_on(setup());
+    #[test]
+    fn batch_put_request() {
+        let requests = generate_request(1000);
+        let requests = &requests;
 
-        b.iter(|| {
-            let future = async {
-                client.send_batch(requests.clone()).await.unwrap()
-            };
-            futures::executor::block_on(future);
-        })
+        run_test(async move |mut client, mut thread_pool| {
+            let replies = client.send_batch(requests.to_vec()).await.unwrap();
+            for reply in replies {
+                assert_eq!(reply, Reply::StatusReply(Status::OK))
+            }
+        });
+    }
+
+    #[bench]
+    fn single_thread_bench(b: &mut test::Bencher) {
+        let requests = generate_request(1000);
+        let requests = &requests;
+
+        run_test(async move |mut client, mut thread_pool| {
+            let client = &client;
+            b.iter(async move || {
+                client.send_batch(requests.to_vec()).await.unwrap();
+            });
+        });
     }
 }
