@@ -203,7 +203,7 @@ mod tests {
         std::thread::Builder::new()
             .name(String::from("server_thread"))
             .spawn(|| {
-                server.run();
+                server.run().unwrap();
             }).unwrap();
 
         return server_port;
@@ -350,17 +350,6 @@ mod tests {
     }
 
     #[test]
-    fn multi_thread_batch() {
-        let requests = generate_request(1000);
-
-        run_test(async move |port, _| {
-            let client = multi_connect(port, 128).await;
-
-            let replies = client.send_batch(requests.to_vec()).await.unwrap();
-        });
-    }
-
-    #[test]
     fn batch_put_request() {
         let requests = generate_request(1000);
         let requests = &requests;
@@ -371,6 +360,17 @@ mod tests {
             for reply in replies {
                 assert_eq!(reply, Reply::StatusReply(Status::OK))
             }
+        });
+    }
+
+    #[test]
+    fn multi_thread_batch() {
+        let requests = generate_request(10000);
+
+        run_test(async move |port, _| {
+            let client = multi_connect(port, 128).await;
+
+            let replies = client.send_batch(requests.to_vec()).await.unwrap();
         });
     }
 
