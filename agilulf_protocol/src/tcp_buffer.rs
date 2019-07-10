@@ -39,22 +39,24 @@ impl TcpStreamBuffer {
         self.read_pos = std::cmp::min(self.read_pos + amt, self.read_cap);
     }
 
-    pub async fn read_until(&mut self, delim: (u8, u8)) -> Result<Vec<u8>> {
+    pub async fn read_line(&mut self) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
         loop {
             let (done, used) = {
                 let available = self.fill_buf().await?;
 
-                match memchr::memchr2(delim.0, delim.1, available) {
-                    Some(i) => {
-                        buf.extend_from_slice(&available[..i + 2]);
-                        (true, i + 2)
-                    }
-                    None => {
-                        buf.extend_from_slice(available);
-                        (false, available.len())
-                    }
+                let index = memchr::memchr(b'\n', available);
+                if index.is_some() &&
+                    ((index.unwrap() > 0 && available[index.unwrap() - 1] == b'\r')
+                        || (index.unwrap() == 0 && buf.len() > 0 && buf[buf.len() - 1] == b'\r')) {
+                    let index = index.unwrap();
+                    buf.extend_from_slice(&available[..index + 1]);
+
+                    (true, index + 1)
+                } else {
+                    buf.extend_from_slice(available);
+                    (false, available.len())
                 }
             };
             self.consume(used);
@@ -63,10 +65,6 @@ impl TcpStreamBuffer {
                 return Ok(buf);
             }
         }
-    }
-
-    pub async fn read_line(&mut self) -> Result<Vec<u8>> {
-        self.read_until((b'\r', b'\n')).await
     }
 
     pub async fn read_exact(&mut self, size: usize) -> Result<Vec<u8>> {
