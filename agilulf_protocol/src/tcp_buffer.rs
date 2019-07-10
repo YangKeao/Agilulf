@@ -49,9 +49,9 @@ impl TcpStreamBuffer {
                 let index = memchr::memchr(b'\n', available);
                 if index.is_some() &&
                     ((index.unwrap() > 0 && available[index.unwrap() - 1] == b'\r')
-                        || (index.unwrap() == 0 && buf.len() > 0 && buf[buf.len() - 1] == b'\r')) {
+                        || (index.unwrap() == 0 && !buf.is_empty() && buf[buf.len() - 1] == b'\r')) {
                     let index = index.unwrap();
-                    buf.extend_from_slice(&available[..index + 1]);
+                    buf.extend_from_slice(&available[..=index]);
 
                     (true, index + 1)
                 } else {
