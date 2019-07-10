@@ -9,6 +9,7 @@ use futures::channel::mpsc::{self, UnboundedReceiver};
 use futures::{SinkExt, StreamExt};
 use futures::lock::Mutex;
 use std::sync::Arc;
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone)]
 pub struct AgilulfClient {
@@ -93,19 +94,65 @@ impl AgilulfClient {
     }
 }
 
+#[derive(Clone)]
+pub struct MultiAgilulfClient {
+    knights: Arc<Vec<AgilulfClient>>
+}
+
+impl MultiAgilulfClient {
+    pub async fn connect(address: &str, knights_num: usize) -> Result<MultiAgilulfClient> {
+        let mut knights = Vec::new();
+        for _ in 0..knights_num {
+            knights.push(AgilulfClient::connect(address).await?)
+        }
+        let knights = Arc::new(knights);
+
+        Ok(MultiAgilulfClient {
+            knights
+        })
+    }
+    pub fn allocate_task(&self, key: &Slice) -> usize {
+        let mut hasher = fnv::FnvHasher::default();
+        key.0.hash(&mut hasher);
+        hasher.finish() as usize % self.knights.len()
+    }
+    pub async fn put(&self, key: Slice, value: Slice) -> Result<Reply> {
+        let id = self.allocate_task(&key);
+        self.send(Command::PUT(PutCommand { key, value }), id).await
+    }
+
+    pub async fn get(&self, key: Slice) -> Result<Reply> {
+        let id = self.allocate_task(&key);
+        self.send(Command::GET(GetCommand { key }), id).await
+    }
+
+    pub async fn delete(&self, key: Slice) -> Result<Reply> {
+        let id = self.allocate_task(&key);
+        self.send(Command::DELETE(DeleteCommand { key }), id).await
+    }
+
+    pub async fn scan(&self, start: Slice, end: Slice) -> Result<Reply> {
+        let id = self.allocate_task(&start);
+        self.send(Command::SCAN(ScanCommand { start, end }), id).await // TODO: need barrier for safety of scan.
+    }
+
+    pub async fn send(&self, command: Command, knight_id: usize) -> Result<Reply> {
+        self.knights[knight_id].send(command).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use agilulf_protocol::Status;
     use agilulf::{MemDatabase, Server};
-    use std::sync::{Once, Arc};
+    use std::sync::{Once};
     use std::sync::atomic::{AtomicI16, Ordering};
     use futures::executor::ThreadPool;
     use futures::task::{SpawnExt};
     use futures::Future;
     use rand::{Rng, thread_rng};
     use rand::distributions::Standard;
-    use std::sync::mpsc::channel;
 
     static INIT: Once = Once::new();
     static SERVER_PORT: AtomicI16 = AtomicI16::new(7000);
@@ -139,8 +186,18 @@ mod tests {
         }
     }
 
+    async fn multi_connect(server_port: i16, knights_num: usize) -> MultiAgilulfClient {
+        let address = format!("127.0.0.1:{}", server_port);
+        loop {
+            match MultiAgilulfClient::connect(address.as_str(), knights_num).await {
+                Err(_) => {},
+                Ok(client) => return client,
+            }
+        }
+    }
+
     fn run_test<F, Fut >(f: F)
-        where F: FnOnce(AgilulfClient, ThreadPool) -> Fut + Send + Sync,
+        where F: FnOnce(i16, ThreadPool) -> Fut + Send + Sync,
               Fut: Future<Output=()> + Send {
         let mut thread_pool = ThreadPool::builder()
             .name_prefix("test_thread").create().unwrap();
@@ -150,14 +207,14 @@ mod tests {
         let extra_thread_pool = thread_pool.clone();
 
         thread_pool.run(async move {
-            let client = connect(port.clone()).await;
-            f(client, extra_thread_pool).await;
+            f(port.clone(), extra_thread_pool).await;
         });
     }
 
     #[test]
     fn put_get_test() {
-        run_test(async move |mut client, mut thread_pool| {
+        run_test(async move |port, _| {
+            let client = connect(port).await;
             for i in 0..100 {
                 let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
@@ -172,7 +229,8 @@ mod tests {
 
     #[test]
     fn put_delete_get_test() {
-        run_test(async move |mut client, mut thread_pool| {
+        run_test(async move |port, _| {
+            let client = connect(port).await;
             for i in 0..100 {
                 let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
@@ -203,7 +261,8 @@ mod tests {
 
     #[test]
     fn override_test() {
-        run_test(async move |mut client, mut thread_pool| {
+        run_test(async move |port, _| {
+            let client = connect(port).await;
             for i in 0..100 {
                 let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
@@ -232,14 +291,22 @@ mod tests {
         });
     }
 
-    fn generate_request(num: usize) -> Vec<Command> {
-        let keys: Vec<Vec<u8>> = (0..num).map(|_| {
+    fn generate_keys(num: usize) -> Vec<Vec<u8>> {
+        (0..num).map(|_| {
             thread_rng().sample_iter(&Standard).take(8).collect()
-        }).collect();
+        }).collect()
+    }
 
-        let value: Vec<Vec<u8>> = (0..num).map(|_| {
+    fn generate_values(num: usize) -> Vec<Vec<u8>> {
+        (0..num).map(|_| {
             thread_rng().sample_iter(&Standard).take(256).collect()
-        }).collect();
+        }).collect()
+    }
+
+    fn generate_request(num: usize) -> Vec<Command> {
+        let keys: Vec<Vec<u8>> = generate_keys(num);
+
+        let value: Vec<Vec<u8>> = generate_values(num);
 
         (0..num).map(|index| {
             Command::PUT(PutCommand {
@@ -254,7 +321,8 @@ mod tests {
         let requests = generate_request(1000);
         let requests = &requests;
 
-        run_test(async move |mut client, mut thread_pool| {
+        run_test(async move |port, _| {
+            let client = connect(port).await;
             let replies = client.send_batch(requests.to_vec()).await.unwrap();
             for reply in replies {
                 assert_eq!(reply, Reply::StatusReply(Status::OK))
@@ -266,16 +334,18 @@ mod tests {
     fn single_thread_bench(b: &mut test::Bencher) {
         let requests = generate_request(1000);
 
-        run_test(async move |mut client, mut thread_pool| {
+        run_test(async move |port, mut thread_pool| {
+            let client = connect(port).await;
             let (sender, receiver) = crossbeam_channel::unbounded::<()>();
-            std::thread::spawn(move || {
-                thread_pool.spawn(async move {
-                    loop {
-                        client.send_batch(requests.to_vec()).await.unwrap();
-                        sender.send(()).unwrap();
+            thread_pool.spawn(async move {
+                let mut requests = requests.iter().cycle();
+                loop {
+                    for _ in 0..1000 {
+                        client.send(requests.next().unwrap().clone()).await.unwrap();
                     }
-                }).unwrap();
-            });
+                    sender.send(()).unwrap();
+                }
+            }).unwrap();
 
             b.iter(|| {
                 receiver.recv().unwrap();
@@ -284,25 +354,22 @@ mod tests {
     }
 
     #[bench]
-    fn multi_thread_bench(b: &mut test::Bencher) {
+    fn single_thread_batch_bench(b: &mut test::Bencher) {
         let requests = generate_request(1000);
 
-        run_test(async move |client, mut thread_pool| {
+        run_test(async move |port, mut thread_pool| {
+            let client = connect(port).await;
             let (sender, receiver) = crossbeam_channel::unbounded::<()>();
-            std::thread::spawn(move || {
-                for _ in 0..4 {
-                    let client = client.clone();
-                    let requests = requests.clone();
-                    let sender = sender.clone();
-                    thread_pool.spawn(async move {
-                        let mut iter = requests.iter().cycle();
-                        loop {
-                            client.send(iter.next().unwrap().clone()).await.unwrap();
-                            sender.send(()).unwrap();
-                        }
-                    }).unwrap();
+
+            let client = client.clone();
+            let requests = requests.clone();
+            let sender = sender.clone();
+            thread_pool.spawn(async move {
+                loop {
+                    client.send_batch(requests.to_vec()).await.unwrap();
+                    sender.send(()).unwrap();
                 }
-            });
+            }).unwrap();
 
             b.iter(|| {
                 receiver.recv().unwrap();
@@ -311,24 +378,23 @@ mod tests {
     }
 
     #[bench]
-    fn multi_thread_batch_bench(b: &mut test::Bencher) {
-        let requests = generate_request(1000);
+    fn multi_knights_bench(b: &mut test::Bencher) {
+        let keys = generate_keys(1000);
+        let values = generate_values(1000);
 
-        run_test(async move |client, mut thread_pool| {
+        run_test(async move |port, mut thread_pool| {
+            let client = multi_connect(port, 4).await;
             let (sender, receiver) = crossbeam_channel::unbounded::<()>();
-            std::thread::spawn(move || {
-                for _ in 0..4 {
-                    let client = client.clone();
-                    let requests = requests.clone();
-                    let sender = sender.clone();
-                    thread_pool.spawn(async move {
-                        loop {
-                            client.send_batch(requests.to_vec()).await.unwrap();
-                            sender.send(()).unwrap();
-                        }
-                    }).unwrap();
+            thread_pool.spawn(async move {
+                let mut keys = keys.iter().cycle();
+                let mut values = values.iter().cycle();
+                loop {
+                    for _ in 0..1000 {
+                        client.put(Slice(keys.next().unwrap().clone()), Slice(values.next().unwrap().clone())).await.unwrap();
+                    }
+                    sender.send(()).unwrap();
                 }
-            });
+            }).unwrap();
 
             b.iter(|| {
                 receiver.recv().unwrap();

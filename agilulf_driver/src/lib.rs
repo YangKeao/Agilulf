@@ -10,4 +10,4 @@ extern crate quick_error;
 mod client;
 mod error;
 
-pub use client::AgilulfClient;
+pub use client::{AgilulfClient, MultiAgilulfClient};
