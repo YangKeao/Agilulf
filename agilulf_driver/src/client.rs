@@ -384,7 +384,10 @@ mod tests {
                     for _ in 0..1000 {
                         client.send(requests.next().unwrap().clone()).await.unwrap();
                     }
-                    sender.send(()).unwrap();
+                    match sender.send(()) {
+                        Err(_)  => {}
+                        Ok(_) => {}
+                    };
                 }
             }).unwrap();
 
@@ -408,7 +411,10 @@ mod tests {
             thread_pool.spawn(async move {
                 loop {
                     client.send_batch(requests.to_vec()).await.unwrap();
-                    sender.send(()).unwrap();
+                    match sender.send(()) {
+                        Err(_)  => {}
+                        Ok(_) => {}
+                    };
                 }
             }).unwrap();
 
@@ -431,7 +437,10 @@ mod tests {
                     for _ in 0..1000 {
                         client.send(requests.next().unwrap().clone()).await.unwrap();
                     }
-                    sender.send(()).unwrap();
+                    match sender.send(()) {
+                        Err(_)  => {}
+                        Ok(_) => {}
+                    };
                 }
             }).unwrap();
 
@@ -455,7 +464,10 @@ mod tests {
             thread_pool.spawn(async move {
                 loop {
                     client.send_batch(requests.to_vec()).await.unwrap();
-                    sender.send(()).unwrap();
+                    match sender.send(()) {
+                        Err(_)  => {}
+                        Ok(_) => {}
+                    };
                 }
             }).unwrap();
 
