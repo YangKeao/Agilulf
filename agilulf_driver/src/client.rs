@@ -8,10 +8,12 @@ use futures::io::{AsyncReadExt, WriteHalf};
 use futures::channel::mpsc::{self, UnboundedReceiver};
 use futures::{SinkExt, StreamExt};
 use futures::lock::Mutex;
+use std::sync::Arc;
 
+#[derive(Clone)]
 pub struct AgilulfClient {
-    reply_receiver: UnboundedReceiver<std::result::Result<Reply, ProtocolError>>,
-    write_stream: AsyncWriteBuffer<WriteHalf<TcpStream>>,
+    reply_receiver: Arc<Mutex<UnboundedReceiver<std::result::Result<Reply, ProtocolError>>>>,
+    write_stream: Arc<Mutex<AsyncWriteBuffer<WriteHalf<TcpStream>>>>,
 }
 
 impl AgilulfClient {
@@ -19,9 +21,11 @@ impl AgilulfClient {
         let addr = address.parse::<SocketAddr>()?;
         let stream = TcpStream::connect(&addr).await?;
         let (reader, writer) = stream.split();
-        let write_stream = AsyncWriteBuffer::new(writer);
+        let write_stream = Arc::new(Mutex::new(AsyncWriteBuffer::new(writer)));
 
         let (mut reply_sender, reply_receiver) = mpsc::unbounded();
+        let reply_receiver = Arc::new(Mutex::new(reply_receiver));
+
         std::thread::spawn(move || {
             let reply_future = async move {
                 let mut reader = AsyncReadBuffer::new(reader);
@@ -39,31 +43,32 @@ impl AgilulfClient {
         })
     }
 
-    pub async fn put(&mut self, key: Slice, value: Slice) -> Result<Reply> {
+    pub async fn put(&self, key: Slice, value: Slice) -> Result<Reply> {
         self.send(Command::PUT(PutCommand { key, value })).await
     }
 
-    pub async fn get(&mut self, key: Slice) -> Result<Reply> {
+    pub async fn get(&self, key: Slice) -> Result<Reply> {
         self.send(Command::GET(GetCommand { key })).await
     }
 
-    pub async fn delete(&mut self, key: Slice) -> Result<Reply> {
+    pub async fn delete(&self, key: Slice) -> Result<Reply> {
         self.send(Command::DELETE(DeleteCommand { key })).await
     }
 
-    pub async fn scan(&mut self, start: Slice, end: Slice) -> Result<Reply> {
+    pub async fn scan(&self, start: Slice, end: Slice) -> Result<Reply> {
         self.send(Command::SCAN(ScanCommand { start, end })).await
     }
 
-    pub async fn send(&mut self, command: Command) -> Result<Reply> {
+    pub async fn send(&self, command: Command) -> Result<Reply> {
         let message: Vec<u8> = command.into();
 
-        self.write_stream.write_all(message).await?;
+        let mut write_stream = self.write_stream.lock().await;
+        write_stream.write_all(message).await?;
 
         self.read_reply().await
     }
 
-    pub async fn send_batch(&mut self, commands: Vec<Command>) -> Result<Vec<Reply>> {
+    pub async fn send_batch(&self, commands: Vec<Command>) -> Result<Vec<Reply>> {
         let len = commands.len();
         let mut messages = Vec::new();
 
@@ -72,7 +77,8 @@ impl AgilulfClient {
             messages.append(&mut message);
         }
 
-        self.write_stream.write_all(messages).await?;
+        let mut write_stream = self.write_stream.lock().await;
+        write_stream.write_all(messages).await?;
 
         let mut replies = Vec::new();
         for _ in 0..len {
@@ -81,8 +87,9 @@ impl AgilulfClient {
         Ok(replies)
     }
 
-    pub async fn read_reply(&mut self) -> Result<Reply> {
-        Ok(self.reply_receiver.select_next_some().await?)
+    pub async fn read_reply(&self) -> Result<Reply> {
+        let mut receiver = self.reply_receiver.lock().await;
+        Ok(receiver.select_next_some().await?)
     }
 }
 
@@ -98,6 +105,7 @@ mod tests {
     use futures::Future;
     use rand::{Rng, thread_rng};
     use rand::distributions::Standard;
+    use std::sync::mpsc::channel;
 
     static INIT: Once = Once::new();
     static SERVER_PORT: AtomicI16 = AtomicI16::new(7000);
@@ -257,13 +265,74 @@ mod tests {
     #[bench]
     fn single_thread_bench(b: &mut test::Bencher) {
         let requests = generate_request(1000);
-        let requests = &requests;
 
         run_test(async move |mut client, mut thread_pool| {
-            let client = &client;
-            b.iter(async move || {
-                client.send_batch(requests.to_vec()).await.unwrap();
+            let (sender, receiver) = crossbeam_channel::unbounded::<()>();
+            std::thread::spawn(move || {
+                thread_pool.spawn(async move {
+                    loop {
+                        client.send_batch(requests.to_vec()).await.unwrap();
+                        sender.send(()).unwrap();
+                    }
+                }).unwrap();
             });
+
+            b.iter(|| {
+                receiver.recv().unwrap();
+            })
+        });
+    }
+
+    #[bench]
+    fn multi_thread_bench(b: &mut test::Bencher) {
+        let requests = generate_request(1000);
+
+        run_test(async move |client, mut thread_pool| {
+            let (sender, receiver) = crossbeam_channel::unbounded::<()>();
+            std::thread::spawn(move || {
+                for _ in 0..4 {
+                    let client = client.clone();
+                    let requests = requests.clone();
+                    let sender = sender.clone();
+                    thread_pool.spawn(async move {
+                        let mut iter = requests.iter().cycle();
+                        loop {
+                            client.send(iter.next().unwrap().clone()).await.unwrap();
+                            sender.send(()).unwrap();
+                        }
+                    }).unwrap();
+                }
+            });
+
+            b.iter(|| {
+                receiver.recv().unwrap();
+            })
+        });
+    }
+
+    #[bench]
+    fn multi_thread_batch_bench(b: &mut test::Bencher) {
+        let requests = generate_request(1000);
+
+        run_test(async move |client, mut thread_pool| {
+            let (sender, receiver) = crossbeam_channel::unbounded::<()>();
+            std::thread::spawn(move || {
+                for _ in 0..4 {
+                    let client = client.clone();
+                    let requests = requests.clone();
+                    let sender = sender.clone();
+                    thread_pool.spawn(async move {
+                        loop {
+                            client.send_batch(requests.to_vec()).await.unwrap();
+                            sender.send(()).unwrap();
+                        }
+                    }).unwrap();
+                }
+            });
+
+            b.iter(|| {
+                receiver.recv().unwrap();
+            })
         });
     }
 }

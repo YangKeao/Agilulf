@@ -16,3 +16,4 @@ futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nig
 agilulf = {path="../"}
 env_logger = "0.6.2"
 rand = "0.7"
+crossbeam-channel = "0.3"
