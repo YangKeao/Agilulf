@@ -2,8 +2,10 @@ use super::{DatabaseResult, Slice, AsyncReadBuffer, Result};
 use super::message::{MessageHead, PartHead};
 use std::error::Error;
 use super::ProtocolError;
-use futures::{AsyncWrite, AsyncRead};
+use futures::{AsyncWrite, AsyncRead, Stream, Poll, Future};
 use super::async_buffer::AsyncWriteBuffer;
+use futures::task::Context;
+use std::pin::Pin;
 
 #[derive(PartialEq, Debug)]
 pub enum Status {
@@ -110,5 +112,17 @@ pub async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> R
         Ok(Reply::SliceReply(Slice(content)))
     } else {
         Err(ProtocolError::GrammarCheckFailed("Reply Grammar Error"))
+    }
+}
+
+impl<T: AsyncRead + Unpin> Stream for AsyncReadBuffer<T> {
+    type Item = Result<Reply>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        let future = async {
+            Some(read_reply(self.get_mut()).await)
+        };
+        futures::pin_mut!(future);
+        future.poll(cx)
     }
 }

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use agilulf_protocol::{read_reply, Command, DeleteCommand, GetCommand, PutCommand, Reply, ScanCommand, Slice, AsyncReadBuffer, AsyncWriteBuffer, ProtocolError};
+use agilulf_protocol::{Command, DeleteCommand, GetCommand, PutCommand, Reply, ScanCommand, Slice, AsyncReadBuffer, AsyncWriteBuffer, ProtocolError};
 use romio::TcpStream;
 
 use super::error::{Result};
@@ -30,12 +30,9 @@ impl AgilulfClient {
         std::thread::spawn(move || {
             let reply_future = async move {
                 let mut reader = AsyncReadBuffer::new(reader);
-                loop  {
-                    let reply = read_reply(&mut reader).await;
-                    reply_sender.send(reply).await.unwrap(); // TODO: handle error here
-                }
+                reply_sender.send_all(&mut reader).await
             };
-            futures::executor::block_on(reply_future);
+            futures::executor::block_on(reply_future).unwrap(); // TODO: handle error here
         });
 
         Ok(AgilulfClient {
@@ -192,7 +189,7 @@ mod tests {
         });
     }
 
-    fn setup_server(executor: &mut ThreadPool) -> i16 {
+    fn setup_server() -> i16 {
         init();
         let server_port = SERVER_PORT.fetch_add(1, Ordering::Relaxed);
         let address = format!("127.0.0.1:{}", server_port);
@@ -235,7 +232,7 @@ mod tests {
         let mut thread_pool = ThreadPool::builder()
             .name_prefix("test_thread").create().unwrap();
 
-        let port = setup_server(&mut thread_pool);
+        let port = setup_server();
 
         let extra_thread_pool = thread_pool.clone();
 
@@ -370,7 +367,7 @@ mod tests {
         run_test(async move |port, _| {
             let client = multi_connect(port, 128).await;
 
-            let replies = client.send_batch(requests.to_vec()).await.unwrap();
+            client.send_batch(requests.to_vec()).await.unwrap();
         });
     }
 
