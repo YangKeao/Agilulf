@@ -1,20 +1,21 @@
 use super::{ProtocolError, Result};
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use romio::TcpStream;
+use futures::{AsyncRead, AsyncWrite};
 
 pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
-pub struct TcpStreamBuffer {
-    stream: TcpStream,
+pub struct AsyncReadBuffer<T: AsyncRead + Unpin> {
+    stream: T,
     read_buffer: Vec<u8>,
 
     read_pos: usize,
     read_cap: usize,
 }
 
-impl TcpStreamBuffer {
-    pub fn new(stream: TcpStream) -> TcpStreamBuffer {
-        TcpStreamBuffer {
+impl<T: AsyncRead + Unpin> AsyncReadBuffer<T> {
+    pub fn new(stream: T) -> AsyncReadBuffer<T> {
+        AsyncReadBuffer {
             stream,
             read_buffer: vec![0; DEFAULT_BUF_SIZE],
 
@@ -90,10 +91,21 @@ impl TcpStreamBuffer {
             }
         }
     }
+}
 
-    pub async fn write_all(&mut self, buf: Vec<u8>) -> Result<()> {
-        self.stream.write_all(buf.as_slice()).await?;
-        Ok(())
+pub struct AsyncWriteBuffer<T: AsyncWrite + Unpin> {
+    stream: T,
+}
+
+impl<T: AsyncWrite + Unpin> AsyncWriteBuffer<T> {
+    pub fn new(stream: T) -> AsyncWriteBuffer<T> {
+        AsyncWriteBuffer {
+            stream,
+        }
+    }
+
+    pub async fn write_all(&mut self, data: Vec<u8>) -> Result<()> {
+        Ok(self.stream.write_all(data.as_slice()).await?)
     }
 }
 
@@ -105,7 +117,7 @@ mod tests {
     use futures::task::SpawnExt;
     use std::net::SocketAddr;
     use futures::{StreamExt, AsyncWriteExt};
-    use crate::TcpStreamBuffer;
+    use crate::AsyncReadBuffer;
 
     const ADDRESS: &str = "127.0.0.1:7999";
     static START_SERVER: Once = Once::new();
@@ -145,7 +157,7 @@ mod tests {
     fn read_line() {
         let future = async {
             let stream = start_server().await;
-            let mut buffer = TcpStreamBuffer::new(stream);
+            let mut buffer = AsyncReadBuffer::new(stream);
 
             let line = buffer.read_line().await.unwrap();
             let line = std::str::from_utf8(line.as_slice()).unwrap();
@@ -159,7 +171,7 @@ mod tests {
     fn read_exact() {
         let future = async {
             let stream = start_server().await;
-            let mut buffer = TcpStreamBuffer::new(stream);
+            let mut buffer = AsyncReadBuffer::new(stream);
 
             let exact = buffer.read_exact(8).await.unwrap();
             let exact = std::str::from_utf8(exact.as_slice()).unwrap();

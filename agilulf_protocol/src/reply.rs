@@ -1,7 +1,9 @@
-use super::{DatabaseResult, Slice, TcpStreamBuffer, Result};
+use super::{DatabaseResult, Slice, AsyncReadBuffer, Result};
 use super::message::{MessageHead, PartHead};
 use std::error::Error;
-use crate::ProtocolError;
+use super::ProtocolError;
+use futures::{AsyncWrite, AsyncRead};
+use super::async_buffer::AsyncWriteBuffer;
 
 #[derive(PartialEq, Debug)]
 pub enum Status {
@@ -73,13 +75,13 @@ impl Into<Vec<u8>> for Reply {
     }
 }
 
-pub async fn send_reply(stream: &mut TcpStreamBuffer, reply: Reply) -> Result<()> {
+pub async fn send_reply<T: AsyncWrite + Unpin>(stream: &mut AsyncWriteBuffer<T>, reply: Reply) -> Result<()> {
     let reply = reply.into();
     stream.write_all(reply).await?;
     Ok(())
 }
 
-pub async fn read_reply(buf: &mut TcpStreamBuffer) -> Result<Reply> {
+pub async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Reply> {
     let first_line = buf.read_line().await?;
 
     if first_line[0] == b'+' {

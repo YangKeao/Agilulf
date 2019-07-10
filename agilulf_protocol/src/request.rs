@@ -1,7 +1,8 @@
-use super::{Slice, ProtocolError, TcpStreamBuffer,Result };
+use super::{Slice, ProtocolError, AsyncReadBuffer, Result };
 use super::message::{MessageHead, PartHead};
+use futures::AsyncRead;
 
-pub async fn read_message(buf: &mut TcpStreamBuffer) -> Result<Vec<Vec<u8>>> {
+pub async fn read_message<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Vec<Vec<u8>>> {
     let mut message = Vec::new();
 
     let line = buf.read_line().await?;
@@ -102,7 +103,7 @@ impl Command {
     }
 }
 
-pub async fn read_command(buf: &mut TcpStreamBuffer) -> Result<Command> {
+pub async fn read_command<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Command> {
     let message = read_message(buf).await?;
 
     Ok(Command::from_message(message)?)

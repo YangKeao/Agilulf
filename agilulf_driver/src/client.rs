@@ -2,23 +2,28 @@ use std::net::SocketAddr;
 
 use agilulf_protocol::{
     read_reply, Command, DeleteCommand, GetCommand, PutCommand, Reply, ScanCommand, Slice,
-    TcpStreamBuffer,
+    AsyncReadBuffer, AsyncWriteBuffer
 };
 use romio::TcpStream;
 
 use super::error::{Result};
+use futures::io::{AsyncReadExt, ReadHalf, WriteHalf};
 
 pub struct AgilulfClient {
-    stream: TcpStreamBuffer,
+    read_stream: AsyncReadBuffer<ReadHalf<TcpStream>>,
+    write_stream: AsyncWriteBuffer<WriteHalf<TcpStream>>,
 }
 
 impl AgilulfClient {
     pub async fn connect(address: &str) -> Result<AgilulfClient> {
         let addr = address.parse::<SocketAddr>()?;
         let stream = TcpStream::connect(&addr).await?;
-        let stream = TcpStreamBuffer::new(stream);
+        let (reader, writer) = stream.split();
 
-        Ok(AgilulfClient { stream })
+        Ok(AgilulfClient {
+            read_stream: AsyncReadBuffer::new(reader),
+            write_stream: AsyncWriteBuffer::new(writer)
+        })
     }
 
     pub async fn put(&mut self, key: Slice, value: Slice) -> Result<Reply> {
@@ -40,7 +45,7 @@ impl AgilulfClient {
     pub async fn send(&mut self, command: Command) -> Result<Reply> {
         let message: Vec<u8> = command.into();
 
-        self.stream.write_all(message).await?;
+        self.write_stream.write_all(message).await?;
 
         self.read_reply().await
     }
@@ -54,7 +59,7 @@ impl AgilulfClient {
             messages.append(&mut message);
         }
 
-        self.stream.write_all(messages).await?;
+        self.write_stream.write_all(messages).await?;
 
         let mut replies = Vec::new();
         for _ in 0..len {
@@ -64,7 +69,7 @@ impl AgilulfClient {
     }
 
     pub async fn read_reply(&mut self) -> Result<Reply> {
-        Ok(read_reply(&mut self.stream).await?)
+        Ok(read_reply(&mut self.read_stream).await?)
     }
 }
 

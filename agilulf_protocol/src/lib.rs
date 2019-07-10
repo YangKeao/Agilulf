@@ -12,8 +12,8 @@ mod message;
 pub mod reply;
 pub mod request;
 
+mod async_buffer;
 mod slice;
-mod tcp_buffer;
 
 pub use reply::*;
 pub use request::*;
@@ -21,5 +21,5 @@ pub use request::*;
 pub use error::protocol_error::{ProtocolError, Result};
 pub use slice::Slice;
 
+pub use async_buffer::{AsyncReadBuffer, AsyncWriteBuffer};
 use error::database_error::Result as DatabaseResult;
-pub use tcp_buffer::TcpStreamBuffer;
