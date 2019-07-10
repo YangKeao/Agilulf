@@ -200,7 +200,11 @@ mod tests {
         let database = MemDatabase::default();
         let server = Server::new(address.as_str(), database).unwrap();
 
-        executor.spawn(server.run_async()).unwrap();
+        std::thread::Builder::new()
+            .name(String::from("server_thread"))
+            .spawn(|| {
+                server.run();
+            }).unwrap();
 
         return server_port;
     }
@@ -343,6 +347,17 @@ mod tests {
                 value: Slice(value[index].clone()),
             })
         }).collect()
+    }
+
+    #[test]
+    fn multi_thread_batch() {
+        let requests = generate_request(1000);
+
+        run_test(async move |port, _| {
+            let client = multi_connect(port, 128).await;
+
+            let replies = client.send_batch(requests.to_vec()).await.unwrap();
+        });
     }
 
     #[test]
