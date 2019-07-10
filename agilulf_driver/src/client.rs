@@ -224,4 +224,34 @@ mod tests {
 
         futures::executor::block_on(future);
     }
+
+    #[bench]
+    fn single_thread_bench(b: &mut test::Bencher) {
+        use rand::{thread_rng};
+        use rand::distributions::Standard;;
+
+        let keys: Vec<Vec<u8>> = (0..10000).map(|_| {
+            thread_rng().sample_iter(&Standard).take(8).collect()
+        }).collect();
+
+        let value: Vec<Vec<u8>> = (0..10000).map(|_| {
+            thread_rng().sample_iter(&Standard).take(256).collect()
+        }).collect();
+
+        let requests: Vec<Command> = (0..10000).map(|index| {
+            Command::PUT(PutCommand {
+                key: Slice(keys[index].clone()),
+                value: Slice(value[index].clone()),
+            })
+        }).collect();
+
+        let mut client = futures::executor::block_on(setup());
+
+        b.iter(|| {
+            let future = async {
+                client.send_batch(requests.clone()).await.unwrap()
+            };
+            futures::executor::block_on(future);
+        })
+    }
 }
