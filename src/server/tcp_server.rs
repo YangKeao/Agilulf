@@ -10,7 +10,7 @@ use romio::{TcpListener, TcpStream};
 use log::{info};
 
 use super::error::{Result};
-use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer, Reply};
+use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer, Reply, GetCommand, Slice};
 use agilulf_protocol::{ProtocolError, Result as ProtocolResult};
 
 use agilulf_protocol::Command;
@@ -59,7 +59,7 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
     info!("Accepting stream from: {}", remote_addr);
 
     let (reader, writer) = stream.split();
-    let mut command_stream = AsyncReadBuffer::new(reader).into_command_stream();
+    let mut command_stream = AsyncReadBuffer::new(reader).into_command_stream().fuse();
     let mut reply_sink = AsyncWriteBuffer::new(writer).into_reply_sink();
 
     let mut process_sink = reply_sink.with(|command: ProtocolResult<Command>| {
@@ -80,7 +80,9 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
         })
     });
 
-    process_sink.send_all(&mut command_stream).await.unwrap();
+    while let command = command_stream.select_next_some().await {
+        process_sink.send(command).await;
+    }
 
     info!("Closing stream from: {}", remote_addr);
     Ok(())

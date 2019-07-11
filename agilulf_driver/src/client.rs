@@ -258,6 +258,29 @@ mod tests {
     }
 
     #[test]
+    fn batch_put_test() {
+        run_test(async move |port, _| {
+            let client = connect(port).await;
+
+            let mut requests = Vec::new();
+            for i in 0..100 {
+                requests.push(Command::PUT(PutCommand{key: Slice(format!("key{}", i).into_bytes()), value: Slice(format!("value{}", i).into_bytes())}));
+            }
+            client.send_batch(requests).await.unwrap();
+
+            let mut requests = Vec::new();
+            for i in 0..100 {
+                requests.push(Command::GET(GetCommand{key: Slice(format!("key{}", i).into_bytes())}));
+            }
+            let replies = client.send_batch(requests).await.unwrap();
+
+            for i in 0..100 {
+                assert_eq!(replies[i], Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+            }
+        });
+    }
+
+    #[test]
     fn put_delete_get_test() {
         run_test(async move |port, _| {
             let client = connect(port).await;
