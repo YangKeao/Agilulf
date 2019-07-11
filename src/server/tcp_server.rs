@@ -11,7 +11,7 @@ use log::{info};
 
 use super::error::{Result};
 use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer};
-use agilulf_protocol::{read_command, send_reply};
+use agilulf_protocol::{send_reply};
 use agilulf_protocol::ProtocolError;
 
 use agilulf_protocol::Command;
@@ -59,10 +59,11 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
     info!("Accepting stream from: {}", remote_addr);
 
     let (reader, writer) = stream.split();
-    let mut read_buffer = AsyncReadBuffer::new(reader);
+    let mut command_stream = AsyncReadBuffer::new(reader).into_command_stream();
     let mut write_buffer = AsyncWriteBuffer::new(writer);
     loop {
-        match read_command(&mut read_buffer).await {
+        let command = command_stream.next().await.unwrap();
+        match command {
             Ok(command) => {
                 match command {
                     Command::GET(command) => {

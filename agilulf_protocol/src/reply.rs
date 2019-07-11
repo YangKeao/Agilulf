@@ -2,10 +2,11 @@ use super::{DatabaseResult, Slice, AsyncReadBuffer, Result};
 use super::message::{MessageHead, PartHead};
 use std::error::Error;
 use super::ProtocolError;
-use futures::{AsyncWrite, AsyncRead, Stream, Poll, Future};
+use futures::{AsyncWrite, AsyncRead, Stream, Poll, Future, Sink};
 use super::async_buffer::AsyncWriteBuffer;
 use futures::task::Context;
 use std::pin::Pin;
+use crate::Command;
 
 #[derive(PartialEq, Debug)]
 pub enum Status {
@@ -83,7 +84,7 @@ pub async fn send_reply<T: AsyncWrite + Unpin>(stream: &mut AsyncWriteBuffer<T>,
     Ok(())
 }
 
-pub async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Reply> {
+async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Reply> {
     let first_line = buf.read_line().await?;
 
     if first_line[0] == b'+' {

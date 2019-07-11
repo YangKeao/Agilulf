@@ -1,13 +1,16 @@
 use super::{Slice, ProtocolError, AsyncReadBuffer, Result };
 use super::message::{MessageHead, PartHead};
-use futures::AsyncRead;
+use futures::{AsyncRead, Poll, Stream, AsyncWrite};
+use std::pin::Pin;
+use futures::task::Context;
+use futures::Future;
+use futures::FutureExt;
 
 pub async fn read_message<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Vec<Vec<u8>>> {
     let mut message = Vec::new();
 
     let line = buf.read_line().await?;
     let head = MessageHead::from_buf(line)?;
-
     for _ in 0..head.count {
         let part = buf.read_line().await?;
         let head = PartHead::from_buf(part)?;
@@ -103,7 +106,7 @@ impl Command {
     }
 }
 
-pub async fn read_command<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Command> {
+async fn read_command<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Command> {
     let message = read_message(buf).await?;
 
     Ok(Command::from_message(message)?)
@@ -164,5 +167,17 @@ impl Into<Vec<u8>> for Command {
         }
 
         message
+    }
+}
+
+impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
+    pub fn into_command_stream(self) -> impl Stream<Item = Result<Command>>  {
+        futures::stream::unfold(self,   |mut buffer| {
+            let future = async move {
+                let command = read_command(&mut buffer).await;
+                Some((command, buffer))
+            };
+            Box::pin(future)
+        })
     }
 }
