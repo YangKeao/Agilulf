@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use futures::executor::{self, ThreadPool};
-use futures::{StreamExt};
+use futures::{StreamExt, SinkExt};
 use futures::task::{SpawnExt};
 use futures::io::AsyncReadExt;
 
@@ -11,7 +11,6 @@ use log::{info};
 
 use super::error::{Result};
 use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer};
-use agilulf_protocol::{send_reply};
 use agilulf_protocol::ProtocolError;
 
 use agilulf_protocol::Command;
@@ -60,7 +59,7 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
 
     let (reader, writer) = stream.split();
     let mut command_stream = AsyncReadBuffer::new(reader).into_command_stream();
-    let mut write_buffer = AsyncWriteBuffer::new(writer);
+    let mut write_buffer = AsyncWriteBuffer::new(writer).into_reply_sink();
     loop {
         let command = command_stream.next().await.unwrap();
         match command {
@@ -68,22 +67,30 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
                 match command {
                     Command::GET(command) => {
                         info!("GET {:?}", command.key.0.as_slice());
-                        send_reply(&mut write_buffer, database.get(command.key).await.into()).await.unwrap(); // TODO: handle this error
+                        match write_buffer.send(database.get(command.key).await.into()).await {
+                            _ => {}
+                        } // TODO: handle error here
                         info!("GET reply sent");
                     }
                     Command::PUT(command) => {
                         info!("PUT {:?} {:?}", command.key.0.as_slice(), command.value.0.as_slice());
-                        send_reply(&mut write_buffer, database.put(command.key, command.value).await.into()).await.unwrap();
+                        match write_buffer.send(database.put(command.key, command.value).await.into()).await {
+                            _ => {}
+                        }
                         info!("PUT reply sent");
                     }
                     Command::SCAN(command) => {
                         info!("SCAN command received");
-                        send_reply(&mut write_buffer, database.scan(command.start, command.end).await.into()).await.unwrap();
+                        match write_buffer.send(database.scan(command.start, command.end).await.into()).await {
+                            _ => {}
+                        }
                         info!("SCAN reply sent");
                     }
                     Command::DELETE(command) => {
                         info!("DELETE command received");
-                        send_reply(&mut write_buffer, database.delete(command.key).await.into()).await.unwrap();
+                        match write_buffer.send( database.delete(command.key).await.into()).await {
+                            _ => {}
+                        }
                         info!("DELETE reply sent");
                     }
                 }

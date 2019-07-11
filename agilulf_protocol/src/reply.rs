@@ -1,12 +1,13 @@
-use super::{DatabaseResult, Slice, AsyncReadBuffer, Result};
+use super::{DatabaseResult, Slice, AsyncReadBuffer, Result, ProtocolError};
 use super::message::{MessageHead, PartHead};
-use std::error::Error;
-use super::ProtocolError;
-use futures::{AsyncWrite, AsyncRead, Stream, Poll, Future, Sink};
+use futures::{AsyncWrite, AsyncRead, Stream, Poll, Future, Sink, SinkExt, AsyncWriteExt};
 use super::async_buffer::AsyncWriteBuffer;
 use futures::task::Context;
 use std::pin::Pin;
 use crate::Command;
+use futures::stream::iter;
+use std::collections::VecDeque;
+use std::error::Error;
 
 #[derive(PartialEq, Debug)]
 pub enum Status {
@@ -78,12 +79,6 @@ impl Into<Vec<u8>> for Reply {
     }
 }
 
-pub async fn send_reply<T: AsyncWrite + Unpin>(stream: &mut AsyncWriteBuffer<T>, reply: Reply) -> Result<()> {
-    let reply = reply.into();
-    stream.write_all(reply).await?;
-    Ok(())
-}
-
 async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Reply> {
     let first_line = buf.read_line().await?;
 
@@ -124,6 +119,15 @@ impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
                 Some((command, buffer))
             };
             Box::pin(future)
+        })
+    }
+}
+
+impl<T: AsyncWrite + Unpin + 'static> AsyncWriteBuffer<T> {
+    pub fn into_reply_sink(self) -> impl Sink<Reply> {
+        self.stream.into_sink().with(|reply: Reply| {
+            let mut reply: Vec<u8> = reply.into();
+            futures::future::ready(Result::Ok(reply))
         })
     }
 }

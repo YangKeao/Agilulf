@@ -93,7 +93,7 @@ impl<T: AsyncRead + Unpin> AsyncReadBuffer<T> {
 }
 
 pub struct AsyncWriteBuffer<T: AsyncWrite + Unpin> {
-    stream: T,
+    pub stream: T,
 }
 
 impl<T: AsyncWrite + Unpin> AsyncWriteBuffer<T> {
