@@ -124,7 +124,7 @@ impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
 }
 
 impl<T: AsyncWrite + Unpin + 'static> AsyncWriteBuffer<T> {
-    pub fn into_reply_sink(self) -> impl Sink<Reply> {
+    pub fn into_reply_sink(self) -> impl Sink<Reply, Error=ProtocolError> {
         self.stream.into_sink().with(|reply: Reply| {
             let mut reply: Vec<u8> = reply.into();
             futures::future::ready(Result::Ok(reply))

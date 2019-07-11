@@ -1,4 +1,5 @@
 #![feature(async_await)]
+#![feature(type_alias_enum_variants)]
 #![feature(test)]
 #![allow(clippy::needless_lifetimes)]
 

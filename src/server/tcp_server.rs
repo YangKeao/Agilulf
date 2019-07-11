@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use futures::executor::{self, ThreadPool};
-use futures::{StreamExt, SinkExt};
+use futures::{StreamExt, SinkExt, Future, TryStreamExt};
 use futures::task::{SpawnExt};
 use futures::io::AsyncReadExt;
 
@@ -10,12 +10,13 @@ use romio::{TcpListener, TcpStream};
 use log::{info};
 
 use super::error::{Result};
-use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer};
-use agilulf_protocol::ProtocolError;
+use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer, Reply};
+use agilulf_protocol::{ProtocolError, Result as ProtocolResult};
 
 use agilulf_protocol::Command;
 use crate::storage::Database;
 use std::sync::Arc;
+use std::pin::Pin;
 
 pub struct Server {
     listener: TcpListener,
@@ -59,56 +60,27 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
 
     let (reader, writer) = stream.split();
     let mut command_stream = AsyncReadBuffer::new(reader).into_command_stream();
-    let mut write_buffer = AsyncWriteBuffer::new(writer).into_reply_sink();
-    loop {
-        let command = command_stream.next().await.unwrap();
-        match command {
-            Ok(command) => {
-                match command {
-                    Command::GET(command) => {
-                        info!("GET {:?}", command.key.0.as_slice());
-                        match write_buffer.send(database.get(command.key).await.into()).await {
-                            _ => {}
-                        } // TODO: handle error here
-                        info!("GET reply sent");
-                    }
-                    Command::PUT(command) => {
-                        info!("PUT {:?} {:?}", command.key.0.as_slice(), command.value.0.as_slice());
-                        match write_buffer.send(database.put(command.key, command.value).await.into()).await {
-                            _ => {}
-                        }
-                        info!("PUT reply sent");
-                    }
-                    Command::SCAN(command) => {
-                        info!("SCAN command received");
-                        match write_buffer.send(database.scan(command.start, command.end).await.into()).await {
-                            _ => {}
-                        }
-                        info!("SCAN reply sent");
-                    }
-                    Command::DELETE(command) => {
-                        info!("DELETE command received");
-                        match write_buffer.send( database.delete(command.key).await.into()).await {
-                            _ => {}
-                        }
-                        info!("DELETE reply sent");
+    let mut reply_sink = AsyncWriteBuffer::new(writer).into_reply_sink();
+
+    let mut process_sink = reply_sink.with(|command: ProtocolResult<Command>| {
+        Box::pin(async {
+            match command {
+                Ok(command) => {
+                    match command {
+                        Command::GET(command) => ProtocolResult::Ok(database.get(command.key).await.into()),
+                        Command::PUT(command) => ProtocolResult::Ok(database.put(command.key, command.value).await.into()),
+                        Command::SCAN(command) => ProtocolResult::Ok(database.scan(command.start, command.end).await.into()),
+                        Command::DELETE(command) => ProtocolResult::Ok(database.delete(command.key).await.into()),
                     }
                 }
-            }
-            Err(err) => {
-                match err {
-                    ProtocolError::ConnectionClosed => {
-                        // Connection closed
-                        break;
-                    }
-                    _ => {
-                        println!("{:?}", err);
-                        // TODO: handle error here
-                    }
+                Err(err) => {
+                    ProtocolResult::Err(err)
                 }
             }
-        }
-    }
+        })
+    });
+
+    process_sink.send_all(&mut command_stream).await.unwrap();
 
     info!("Closing stream from: {}", remote_addr);
     Ok(())
