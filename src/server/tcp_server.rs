@@ -67,22 +67,22 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
                 match command {
                     Command::GET(command) => {
                         info!("GET {:?}", command.key.0.as_slice());
-                        send_reply(&mut write_buffer, database.get(command.key).into()).await.unwrap(); // TODO: handle this error
+                        send_reply(&mut write_buffer, database.get(command.key).await.into()).await.unwrap(); // TODO: handle this error
                         info!("GET reply sent");
                     }
                     Command::PUT(command) => {
                         info!("PUT {:?} {:?}", command.key.0.as_slice(), command.value.0.as_slice());
-                        send_reply(&mut write_buffer, database.put(command.key, command.value).into()).await.unwrap();
+                        send_reply(&mut write_buffer, database.put(command.key, command.value).await.into()).await.unwrap();
                         info!("PUT reply sent");
                     }
                     Command::SCAN(command) => {
                         info!("SCAN command received");
-                        send_reply(&mut write_buffer, database.scan(command.start, command.end).into()).await.unwrap();
+                        send_reply(&mut write_buffer, database.scan(command.start, command.end).await.into()).await.unwrap();
                         info!("SCAN reply sent");
                     }
                     Command::DELETE(command) => {
                         info!("DELETE command received");
-                        send_reply(&mut write_buffer, database.delete(command.key).into()).await.unwrap();
+                        send_reply(&mut write_buffer, database.delete(command.key).await.into()).await.unwrap();
                         info!("DELETE reply sent");
                     }
                 }

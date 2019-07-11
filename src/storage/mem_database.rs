@@ -3,6 +3,8 @@ use agilulf_protocol::error::database_error::{DatabaseError, Result};
 
 use std::collections::BTreeMap;
 use std::sync::RwLock;
+use futures::Future;
+use std::pin::Pin;
 
 #[derive(Default)]
 pub struct MemDatabase {
@@ -10,33 +12,41 @@ pub struct MemDatabase {
 }
 
 impl Database for MemDatabase {
-    fn get(&self, key: Slice) -> Result<Slice> {
-        match self.inner.read().unwrap().get(&key) {
-            Some(value) => Ok(value.clone()), // TODO: clone here may be avoidable
-            None => Err(DatabaseError::KeyNotFound),
-        }
+    fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<Slice>> + Send + '_>> {
+        Box::pin(async move {
+            match self.inner.read().unwrap().get(&key) {
+                Some(value) => Ok(value.clone()), // TODO: clone here may be avoidable
+                None => Err(DatabaseError::KeyNotFound),
+            }
+        })
     }
 
-    fn put(&self, key: Slice, value: Slice) -> Result<()> {
-        self.inner.write().unwrap().insert(key, value);
-        Ok(())
+    fn put(&self, key: Slice, value: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            self.inner.write().unwrap().insert(key, value);
+            Ok(())
+        })
     }
 
-    fn scan(&self, start: Slice, end: Slice) -> Result<Vec<Slice>> {
-        Ok(self
-            .inner
-            .read()
-            .unwrap()
-            .range(start..end)
-            .map(|(key, _)| key.clone()) // TODO: clone here may be avoidable
-            .collect())
+    fn scan(&self, start: Slice, end: Slice) -> Pin<Box<dyn Future<Output = Result<Vec<Slice>>> + Send + '_>> {
+        Box::pin(async move {
+            Ok(self
+                .inner
+                .read()
+                .unwrap()
+                .range(start..end)
+                .map(|(key, _)| key.clone()) // TODO: clone here may be avoidable
+                .collect())
+        })
     }
 
-    fn delete(&self, key: Slice) -> Result<()> {
-        match self.inner.write().unwrap().remove(&key) {
-            Some(_) => Ok(()),
-            None => Err(DatabaseError::KeyNotFound),
-        }
+    fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
+        Box::pin(async move {
+            match self.inner.write().unwrap().remove(&key) {
+                Some(_) => Ok(()),
+                None => Err(DatabaseError::KeyNotFound),
+            }
+        })
     }
 }
 
@@ -47,6 +57,7 @@ mod tests {
 
     #[bench]
     fn bench_put(b: &mut test::Bencher) {
+        // TODO: need rewrite
         use rand::distributions::Standard;
         use rand::{thread_rng, Rng};;
 
