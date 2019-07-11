@@ -116,14 +116,14 @@ async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Resul
     }
 }
 
-impl<T: AsyncRead + Unpin> Stream for AsyncReadBuffer<T> {
-    type Item = Result<Reply>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let future = async {
-            Some(read_reply(self.get_mut()).await)
-        };
-        futures::pin_mut!(future);
-        future.poll(cx)
+impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
+    pub fn into_reply_stream(self) -> impl Stream<Item = Result<Reply>>  {
+        futures::stream::unfold(self,   |mut buffer| {
+            let future = async move {
+                let command = read_reply(&mut buffer).await;
+                Some((command, buffer))
+            };
+            Box::pin(future)
+        })
     }
 }

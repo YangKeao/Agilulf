@@ -29,8 +29,8 @@ impl AgilulfClient {
 
         std::thread::spawn(move || {
             let reply_future = async move {
-                let mut reader = AsyncReadBuffer::new(reader);
-                reply_sender.send_all(&mut reader).await
+                let mut reply_stream = AsyncReadBuffer::new(reader).into_reply_stream();
+                reply_sender.send_all(&mut reply_stream).await
             };
             futures::executor::block_on(reply_future).unwrap(); // TODO: handle error here
         });
