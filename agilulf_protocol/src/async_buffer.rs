@@ -25,7 +25,7 @@ impl<T: AsyncRead + Unpin> AsyncReadBuffer<T> {
 
     pub async fn fill_buf(&mut self) -> Result<&[u8]> {
         if self.read_pos >= self.read_cap {
-            debug_assert_eq!(self.read_pos, self.read_cap);
+            debug_assert_eq!(self.read_pos, self.read_cap); // TODO: this assert will fail when close connection on client.
             self.read_cap = self.stream.read(&mut self.read_buffer).await?;
             if self.read_cap == 0 {
                 return Err(ProtocolError::ConnectionClosed);
