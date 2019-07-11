@@ -2,19 +2,20 @@ use super::{Database, Slice};
 use agilulf_protocol::error::database_error::{DatabaseError, Result};
 
 use std::collections::BTreeMap;
-use std::sync::RwLock;
-use futures::Future;
 use std::pin::Pin;
+
+use futures::Future;
+use futures::lock::Mutex;
 
 #[derive(Default)]
 pub struct MemDatabase {
-    inner: RwLock<BTreeMap<Slice, Slice>>,
+    inner: Mutex<BTreeMap<Slice, Slice>>,
 }
 
 impl Database for MemDatabase {
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<Slice>> + Send + '_>> {
         Box::pin(async move {
-            match self.inner.read().unwrap().get(&key) {
+            match self.inner.lock().await.get(&key) {
                 Some(value) => Ok(value.clone()), // TODO: clone here may be avoidable
                 None => Err(DatabaseError::KeyNotFound),
             }
@@ -23,7 +24,7 @@ impl Database for MemDatabase {
 
     fn put(&self, key: Slice, value: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         Box::pin(async move {
-            self.inner.write().unwrap().insert(key, value);
+            self.inner.lock().await.insert(key, value);
             Ok(())
         })
     }
@@ -32,8 +33,8 @@ impl Database for MemDatabase {
         Box::pin(async move {
             Ok(self
                 .inner
-                .read()
-                .unwrap()
+                .lock()
+                .await
                 .range(start..end)
                 .map(|(key, _)| key.clone()) // TODO: clone here may be avoidable
                 .collect())
@@ -42,7 +43,7 @@ impl Database for MemDatabase {
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         Box::pin(async move {
-            match self.inner.write().unwrap().remove(&key) {
+            match self.inner.lock().await.remove(&key) {
                 Some(_) => Ok(()),
                 None => Err(DatabaseError::KeyNotFound),
             }
