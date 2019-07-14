@@ -19,6 +19,7 @@ futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nig
 log = "0.4"
 env_logger = "0.6.2"
 agilulf_protocol = { path = "./agilulf_protocol" }
+agilulf_skiplist = {path = "./agilulf_skiplist"}
 
 [dev-dependencies]
 rand = "0.7"

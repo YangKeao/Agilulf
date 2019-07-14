@@ -5,13 +5,13 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
 #[derive(Clone)]
-struct Item {
+struct Item<T: Default + Clone> {
     pub key: NonStandardSlice,
-    pub value: NonStandardSlice,
+    pub value: T,
     pub serial_number: u64,
 }
 
-impl PartialOrd for Item {
+impl<T: Default + Clone> PartialOrd for Item<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.key < other.key {
             Some(std::cmp::Ordering::Less)
@@ -29,11 +29,11 @@ impl PartialOrd for Item {
     }
 }
 
-impl NonStandard for Item {
+impl<T: Default + Clone> NonStandard for Item<T> {
     fn min() -> Self {
         Item {
             key: NonStandardSlice::MIN,
-            value: NonStandardSlice::MIN,
+            value: T::default(),
             serial_number: std::u64::MIN,
         }
     }
@@ -41,45 +41,51 @@ impl NonStandard for Item {
     fn max() -> Self {
         Item {
             key: NonStandardSlice::MAX,
-            value: NonStandardSlice::MAX,
+            value: T::default(),
             serial_number: std::u64::MAX,
         }
     }
 }
 
-impl PartialEq for Item {
+impl<T: Default + Clone> PartialEq for Item<T> {
     fn eq(&self, other: &Self) -> bool {
         self.partial_cmp(other) == Some(std::cmp::Ordering::Equal)
     }
 }
 
-pub struct SkipMap {
-    skiplist: SkipList<Item>,
+pub struct SkipMap<T: Default + Clone> {
+    skiplist: SkipList<Item<T>>,
     serial_number: AtomicU64,
 }
 
-impl SkipMap {
-    fn new(serial_number: u64) -> SkipMap {
+impl<T: Default + Clone> Default for SkipMap<T> {
+    fn default() -> Self {
+        Self::new(0)
+    }
+}
+
+impl<T: Default + Clone> SkipMap<T> {
+    fn new(serial_number: u64) -> SkipMap<T> {
         SkipMap {
             skiplist: SkipList::new(),
             serial_number: AtomicU64::new(serial_number),
         }
     }
 
-    fn insert(&self, key: &Slice, value: &Slice) {
+    pub fn insert(&self, key: &Slice, value: &T) {
         let new_item = Item {
             key: NonStandardSlice::Slice(key.clone()),
-            value: NonStandardSlice::Slice(value.clone()),
+            value: value.clone(),
             serial_number: self.serial_number.fetch_add(1, Ordering::SeqCst),
         };
 
         self.skiplist.insert(&new_item);
     }
 
-    fn find(&self, key: &Slice) -> Option<Slice> {
+    pub fn find(&self, key: &Slice) -> Option<T> {
         let new_item = Item {
             key: NonStandardSlice::Slice(key.clone()),
-            value: NonStandardSlice::Slice(Slice(Vec::with_capacity(0))),
+            value: T::default(),
             serial_number: std::u64::MAX,
         };
 
@@ -87,10 +93,7 @@ impl SkipMap {
         match &prev.key {
             NonStandardSlice::Slice(slice) => {
                 if slice == key {
-                    match &prev.value {
-                        NonStandardSlice::Slice(value) => Some(value.clone()),
-                        _ => unreachable!(),
-                    }
+                    Some(prev.value.clone())
                 } else {
                     None
                 }
@@ -123,7 +126,7 @@ mod tests {
 
     #[test]
     fn simple_map_test() {
-        let map = SkipMap::new(0);
+        let map: SkipMap<Slice> = SkipMap::new(0);
 
         let keys: Vec<Slice> = generate_keys(1000)
             .into_iter()
@@ -148,7 +151,7 @@ mod tests {
     fn multi_thread_test() {
         use std::sync::Arc;
 
-        let map = Arc::new(SkipMap::new(0));
+        let map: Arc<SkipMap<Slice>> = Arc::new(SkipMap::new(0));
 
         let map_ref = &map;
         (0..4)

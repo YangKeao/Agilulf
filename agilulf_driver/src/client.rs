@@ -396,7 +396,7 @@ mod tests {
 
     #[bench]
     fn single_thread_bench(b: &mut test::Bencher) {
-        let requests = generate_request(100);
+        let requests = generate_request(1000);
 
         run_test(async move |port, mut thread_pool| {
             let client = connect(port).await;
@@ -422,7 +422,7 @@ mod tests {
 
     #[bench]
     fn single_thread_batch_bench(b: &mut test::Bencher) {
-        let requests = generate_request(100);
+        let requests = generate_request(1000);
 
         run_test(async move |port, mut thread_pool| {
             let client = connect(port).await;
@@ -449,7 +449,7 @@ mod tests {
 
     #[bench]
     fn multi_knights_bench(b: &mut test::Bencher) {
-        let requests = generate_request(100);
+        let requests = generate_request(1000);
 
         run_test(async move |port, mut thread_pool| {
             let client = multi_connect(port, 4).await;
@@ -475,7 +475,7 @@ mod tests {
 
     #[bench]
     fn multi_thread_batch_bench(b: &mut test::Bencher) {
-        let requests = generate_request(100);
+        let requests = generate_request(1000);
 
         run_test(async move |port, mut thread_pool| {
             let client = multi_connect(port, 128).await;
