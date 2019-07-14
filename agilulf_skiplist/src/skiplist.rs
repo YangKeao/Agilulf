@@ -3,6 +3,7 @@ use super::linklist::LinkNode;
 use super::non_standard_slice::NonStandard;
 use rand::Rng;
 use std::cmp::min;
+use std::fmt::Debug;
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
@@ -14,7 +15,7 @@ pub struct SkipListNode<T> {
     down: Option<AtomicPtr<SkipListNode<T>>>,
 }
 
-impl<T: std::cmp::PartialOrd + Clone> SkipListNode<T> {
+impl<T: std::cmp::PartialOrd + Clone + Debug> SkipListNode<T> {
     fn set_down(&mut self, down: *mut SkipListNode<T>) {
         self.down = Some(AtomicPtr::new(down));
     }
@@ -25,12 +26,12 @@ impl<T: std::cmp::PartialOrd + Clone> SkipListNode<T> {
             let partial_skiplist = PartialSkipList::new(&now);
             let ret = partial_skiplist.seek(key);
 
-            (ret.0.load(Ordering::AcqRel), ret.1.load(Ordering::AcqRel))
+            (ret.0.load(Ordering::SeqCst), ret.1.load(Ordering::SeqCst))
         }
     }
 }
 
-impl<T: std::cmp::PartialOrd + Clone> LinkNode<T> for SkipListNode<T> {
+impl<T: std::cmp::PartialOrd + Clone + Debug> LinkNode<T> for SkipListNode<T> {
     fn new(key: &T) -> *mut Self {
         Box::into_raw(box SkipListNode {
             key: key.clone(),
@@ -48,7 +49,7 @@ impl<T: std::cmp::PartialOrd + Clone> LinkNode<T> for SkipListNode<T> {
     }
 
     fn set_next(&mut self, next: *mut Self) {
-        self.succ.store(next, Ordering::AcqRel);
+        self.succ.store(next, Ordering::SeqCst);
     }
 }
 
@@ -60,17 +61,17 @@ where
 }
 
 impl<'a, T: std::cmp::PartialOrd> PartialSkipList<'a, T> {
-    fn new(node: &'a AtomicPtr<SkipListNode<T>>) -> Self {
+    fn new(node: &'a AtomicPtr<SkipListNode<T>>) -> PartialSkipList<'a, T> {
         Self { node }
     }
 
     fn base_level(&self) -> bool {
-        unsafe { (*self.node.load(Ordering::AcqRel)).down.is_none() }
+        unsafe { (*self.node.load(Ordering::SeqCst)).down.is_none() }
     }
 
     fn down_stairs(&self) -> Option<PartialSkipList<'a, T>> {
         unsafe {
-            (*self.node.load(Ordering::AcqRel))
+            (*self.node.load(Ordering::SeqCst))
                 .down
                 .as_ref()
                 .and_then(|node| Some(PartialSkipList { node }))
@@ -78,7 +79,7 @@ impl<'a, T: std::cmp::PartialOrd> PartialSkipList<'a, T> {
     }
 }
 
-impl<T: std::cmp::PartialOrd + Clone> LinkList<T> for PartialSkipList<'_, T> {
+impl<T: std::cmp::PartialOrd + Clone + Debug> LinkList<T> for PartialSkipList<'_, T> {
     type Node = SkipListNode<T>;
 
     fn get_head(&self) -> &AtomicPtr<Self::Node> {
@@ -102,7 +103,7 @@ fn generate_level() -> usize {
     return level;
 }
 
-impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
+impl<T: std::cmp::PartialOrd + Clone + NonStandard + Debug> SkipList<T> {
     fn new() -> SkipList<T> {
         let mut head: Vec<AtomicPtr<SkipListNode<T>>> = Vec::with_capacity(SKIPLIST_MAX_LEVEL);
         let mut tail: Vec<AtomicPtr<SkipListNode<T>>> = Vec::with_capacity(SKIPLIST_MAX_LEVEL);
@@ -115,8 +116,8 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
                 (*head_node).set_next(tail_node);
 
                 if index > 0 {
-                    (*head_node).set_down(head[index - 1].load(Ordering::AcqRel));
-                    (*tail_node).set_down(tail[index - 1].load(Ordering::AcqRel));
+                    (*head_node).set_down(head[index - 1].load(Ordering::SeqCst));
+                    (*tail_node).set_down(tail[index - 1].load(Ordering::SeqCst));
                 }
             }
 
@@ -133,18 +134,45 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
         let mut ret = Vec::new();
 
         loop {
-            let (prev, succ) = partial_skip_list.seek(key);
-            ret.push((prev.load(Ordering::AcqRel), succ.load(Ordering::AcqRel)));
+            let prev_ptr = {
+                let (prev, succ) = partial_skip_list.seek(key);
+                ret.push((prev.load(Ordering::SeqCst), succ.load(Ordering::SeqCst)));
+                prev.load(Ordering::SeqCst)
+            };
 
             if partial_skip_list.base_level() {
                 return ret;
             } else {
-                partial_skip_list = partial_skip_list.down_stairs().unwrap(); // It's safe here
+                unsafe {
+                    partial_skip_list = PartialSkipList::new((*prev_ptr).down.as_ref().unwrap())
+                }
             }
         }
     }
 
-    fn insert(&self, key: &T) {
+    pub fn only_find_key(&self, key: &T) -> (&T, &T) {
+        let head = self.head.last().unwrap(); // It's safe here
+        let mut partial_skip_list = PartialSkipList::new(head);
+
+        loop {
+            let (prev_ptr, next_ptr) = {
+                let (prev, succ) = partial_skip_list.seek(key);
+                (prev.load(Ordering::SeqCst), succ.load(Ordering::SeqCst))
+            };
+
+            if partial_skip_list.base_level() {
+                unsafe {
+                    return ((*prev_ptr).get_key(), (*next_ptr).get_key());
+                }
+            } else {
+                unsafe {
+                    partial_skip_list = PartialSkipList::new((*prev_ptr).down.as_ref().unwrap())
+                }
+            }
+        }
+    }
+
+    pub fn insert(&self, key: &T) {
         let seek_result = self.seek(key);
         let level = min(generate_level(), SKIPLIST_MAX_LEVEL);
 
@@ -155,7 +183,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
                 unsafe { (*new_node).set_down(prev_level) };
             }
 
-            let (mut prev, mut succ) = seek_result[index];
+            let (mut prev, mut succ) = seek_result[seek_result.len() - index - 1];
 
             loop {
                 unsafe {
@@ -163,7 +191,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
 
                     if (*prev)
                         .get_succ()
-                        .compare_exchange(succ, new_node, Ordering::AcqRel, Ordering::AcqRel)
+                        .compare_exchange(succ, new_node, Ordering::SeqCst, Ordering::SeqCst)
                         .is_ok()
                     {
                         prev_level = new_node;
@@ -175,6 +203,41 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
                     }
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    impl NonStandard for i32 {
+        fn min() -> Self {
+            std::i32::MIN
+        }
+
+        fn max() -> Self {
+            std::i32::MAX
+        }
+    }
+
+    #[test]
+    fn skiplist_basic_test() {
+        let skiplist: SkipList<i32> = SkipList::new();
+
+        for i in 0..100 {
+            skiplist.insert(&(i * 2));
+        }
+
+        for i in 0..100 {
+            let (prev, succ) = skiplist.only_find_key(&(i * 2));
+
+            if i == 0 {
+                assert_eq!(prev, &std::i32::MIN);
+            } else {
+                assert_eq!(prev, &((i - 1) * 2));
+            }
+            assert_eq!(succ, &(i * 2));
         }
     }
 }

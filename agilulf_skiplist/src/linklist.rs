@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 pub trait LinkNode<T>: Sized {
@@ -12,7 +13,7 @@ pub trait LinkNode<T>: Sized {
 
 pub trait LinkList<T>: Sized
 where
-    T: std::cmp::PartialOrd,
+    T: std::cmp::PartialOrd + Debug,
 {
     type Node: LinkNode<T>;
 
@@ -25,15 +26,15 @@ where
             let (mut prev, mut succ) = self.seek(key);
 
             loop {
-                (*new_node).set_next(succ.load(Ordering::AcqRel));
+                (*new_node).set_next(succ.load(Ordering::SeqCst));
 
-                if (*prev.load(Ordering::AcqRel))
+                if (*prev.load(Ordering::SeqCst))
                     .get_succ()
                     .compare_exchange(
-                        succ.load(Ordering::AcqRel),
+                        succ.load(Ordering::SeqCst),
                         new_node,
-                        Ordering::AcqRel,
-                        Ordering::AcqRel,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
                     )
                     .is_ok()
                 {
@@ -54,11 +55,11 @@ where
     ) -> (&'a AtomicPtr<Self::Node>, &'a AtomicPtr<Self::Node>) {
         unsafe {
             let mut now: &AtomicPtr<Self::Node> = from;
-            let mut next: &AtomicPtr<Self::Node> = (*from.load(Ordering::AcqRel)).get_succ();
+            let mut next: &AtomicPtr<Self::Node> = (*from.load(Ordering::SeqCst)).get_succ();
 
-            while (*next.load(Ordering::AcqRel)).get_key() < key {
+            while (*next.load(Ordering::SeqCst)).get_key() < key {
                 now = next;
-                next = (*next.load(Ordering::AcqRel)).get_succ();
+                next = (*next.load(Ordering::SeqCst)).get_succ();
             }
 
             (now, next)
