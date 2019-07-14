@@ -1,4 +1,3 @@
-use std::fmt::Debug;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 pub trait LinkNode<T>: Sized {
@@ -13,7 +12,7 @@ pub trait LinkNode<T>: Sized {
 
 pub trait LinkList<T>: Sized
 where
-    T: std::cmp::PartialOrd + Debug,
+    T: std::cmp::PartialOrd,
 {
     type Node: LinkNode<T>;
 

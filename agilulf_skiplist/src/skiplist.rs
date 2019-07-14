@@ -3,7 +3,6 @@ use super::linklist::LinkNode;
 use super::non_standard_slice::NonStandard;
 use rand::Rng;
 use std::cmp::min;
-use std::fmt::Debug;
 use std::ptr::{null, null_mut};
 use std::sync::atomic::{AtomicPtr, Ordering};
 
@@ -15,7 +14,7 @@ pub struct SkipListNode<T> {
     down: Option<AtomicPtr<SkipListNode<T>>>,
 }
 
-impl<T: std::cmp::PartialOrd + Clone + Debug> SkipListNode<T> {
+impl<T: std::cmp::PartialOrd + Clone> SkipListNode<T> {
     fn set_down(&mut self, down: *mut SkipListNode<T>) {
         self.down = Some(AtomicPtr::new(down));
     }
@@ -31,7 +30,7 @@ impl<T: std::cmp::PartialOrd + Clone + Debug> SkipListNode<T> {
     }
 }
 
-impl<T: std::cmp::PartialOrd + Clone + Debug> LinkNode<T> for SkipListNode<T> {
+impl<T: std::cmp::PartialOrd + Clone> LinkNode<T> for SkipListNode<T> {
     fn new(key: &T) -> *mut Self {
         Box::into_raw(box SkipListNode {
             key: key.clone(),
@@ -79,7 +78,7 @@ impl<'a, T: std::cmp::PartialOrd> PartialSkipList<'a, T> {
     }
 }
 
-impl<T: std::cmp::PartialOrd + Clone + Debug> LinkList<T> for PartialSkipList<'_, T> {
+impl<T: std::cmp::PartialOrd + Clone> LinkList<T> for PartialSkipList<'_, T> {
     type Node = SkipListNode<T>;
 
     fn get_head(&self) -> &AtomicPtr<Self::Node> {
@@ -103,8 +102,8 @@ fn generate_level() -> usize {
     return level;
 }
 
-impl<T: std::cmp::PartialOrd + Clone + NonStandard + Debug> SkipList<T> {
-    fn new() -> SkipList<T> {
+impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
+    pub fn new() -> SkipList<T> {
         let mut head: Vec<AtomicPtr<SkipListNode<T>>> = Vec::with_capacity(SKIPLIST_MAX_LEVEL);
         let mut tail: Vec<AtomicPtr<SkipListNode<T>>> = Vec::with_capacity(SKIPLIST_MAX_LEVEL);
 
@@ -150,7 +149,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard + Debug> SkipList<T> {
         }
     }
 
-    pub fn only_find_key(&self, key: &T) -> (&T, &T) {
+    pub fn find_key(&self, key: &T) -> (&T, &T) {
         let head = self.head.last().unwrap(); // It's safe here
         let mut partial_skip_list = PartialSkipList::new(head);
 
@@ -208,7 +207,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard + Debug> SkipList<T> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     impl NonStandard for i32 {
@@ -230,7 +229,7 @@ mod test {
         }
 
         for i in 0..100 {
-            let (prev, succ) = skiplist.only_find_key(&(i * 2));
+            let (prev, succ) = skiplist.find_key(&(i * 2));
 
             if i == 0 {
                 assert_eq!(prev, &std::i32::MIN);

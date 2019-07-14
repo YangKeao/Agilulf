@@ -2,6 +2,8 @@
 
 mod linklist;
 
-mod skiplist;
+pub mod skiplist;
 
 mod non_standard_slice;
+
+pub mod skipmap;

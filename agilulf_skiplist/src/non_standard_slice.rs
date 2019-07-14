@@ -7,7 +7,7 @@ pub trait NonStandard: PartialOrd {
 }
 
 #[derive(Clone, Eq, Debug)]
-enum NonStandardSlice {
+pub enum NonStandardSlice {
     MIN,
     Slice(Slice),
     MAX,
@@ -16,8 +16,14 @@ enum NonStandardSlice {
 impl PartialOrd for NonStandardSlice {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self {
-            NonStandardSlice::MIN => Some(Ordering::Less),
-            NonStandardSlice::MAX => Some(Ordering::Greater),
+            NonStandardSlice::MIN => match other {
+                NonStandardSlice::MIN => Some(Ordering::Equal),
+                _ => Some(Ordering::Less),
+            },
+            NonStandardSlice::MAX => match other {
+                NonStandardSlice::MAX => Some(Ordering::Equal),
+                _ => Some(Ordering::Greater),
+            },
             NonStandardSlice::Slice(slice) => match other {
                 NonStandardSlice::MIN => Some(Ordering::Greater),
                 NonStandardSlice::MAX => Some(Ordering::Less),
