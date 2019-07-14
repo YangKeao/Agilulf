@@ -1,6 +1,7 @@
 use super::non_standard_slice::{NonStandard, NonStandardSlice};
 use super::skiplist::SkipList;
 use agilulf_protocol::Slice;
+use std::ops::RangeBounds;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
@@ -89,17 +90,70 @@ impl<T: Default + Clone> SkipMap<T> {
             serial_number: std::u64::MAX,
         };
 
-        let (prev, next) = self.skiplist.find_key(&new_item);
-        match &prev.key {
+        let item = self.skiplist.read_key(&new_item);
+        match &item.key {
             NonStandardSlice::Slice(slice) => {
                 if slice == key {
-                    Some(prev.value.clone())
+                    Some(item.value.clone())
                 } else {
                     None
                 }
             }
             _ => None,
         }
+    }
+
+    pub fn scan<R>(&self, range: R) -> Vec<(Slice, T)>
+    where
+        R: RangeBounds<Slice>,
+    {
+        use std::ops::Bound;
+
+        let start_item = match range.start_bound() {
+            Bound::Included(bound) => Item {
+                key: NonStandardSlice::Slice(bound.clone()),
+                value: T::default(),
+                serial_number: 0,
+            },
+            Bound::Excluded(bound) => Item {
+                key: NonStandardSlice::Slice(bound.clone()),
+                value: T::default(),
+                serial_number: std::u64::MAX,
+            },
+            Bound::Unbounded => Item::min(),
+        };
+        let end_item = match range.end_bound() {
+            Bound::Included(bound) => Item {
+                key: NonStandardSlice::Slice(bound.clone()),
+                value: T::default(),
+                serial_number: std::u64::MAX,
+            },
+            Bound::Excluded(bound) => Item {
+                key: NonStandardSlice::Slice(bound.clone()),
+                value: T::default(),
+                serial_number: 0,
+            },
+            Bound::Unbounded => Item::max(),
+        };
+        let mut data = self
+            .skiplist
+            .scan(&start_item, &end_item)
+            .into_iter()
+            .map(|item| (&item.key, &item.value, &item.serial_number))
+            .rev();
+
+        let mut ret = Vec::new();
+        let mut last_serial_number = -1;
+        for (key, value, serial_number) in data.rev() {
+            if (*serial_number as i32) != last_serial_number {
+                ret.push((key.clone().unwrap(), value.clone()));
+                last_serial_number = *serial_number as i32;
+            } else {
+                continue;
+            }
+        }
+
+        ret
     }
 }
 
@@ -109,6 +163,7 @@ mod tests {
     use agilulf_protocol::Slice;
     use rand::distributions::Standard;
     use rand::{thread_rng, Rng};
+    use std::collections::{BTreeMap, HashMap};
     use std::thread;
     use std::thread::JoinHandle;
 
@@ -178,5 +233,45 @@ mod tests {
                 })
             })
             .for_each(|thread| thread.join().unwrap());
+    }
+
+    #[test]
+    fn scan() {
+        let map: SkipMap<Slice> = SkipMap::new(0);
+        let mut btree_map = BTreeMap::new();
+
+        let keys: Vec<Slice> = generate_keys(1000)
+            .into_iter()
+            .map(|key| Slice(key))
+            .collect();
+        let values: Vec<Slice> = generate_values(1000)
+            .into_iter()
+            .map(|key| Slice(key))
+            .collect();
+
+        for i in 0..1000 {
+            map.insert(&keys[i], &values[i]);
+            btree_map.insert(keys[i].clone(), values[i].clone());
+        }
+
+        for _ in 0..5 {
+            let start = rand::thread_rng().gen_range(0, 1000);
+            let end = rand::thread_rng().gen_range(start, 1000);
+
+            let range_start = std::cmp::min(keys[start].clone(), keys[end].clone());
+            let range_end = std::cmp::max(keys[start].clone(), keys[end].clone());
+
+            let kv_pair: Vec<(Slice, Slice)> = map.scan(range_start.clone()..range_end.clone());
+            let kv_pair_exp: Vec<(Slice, Slice)> = btree_map
+                .range(range_start.clone()..range_end.clone())
+                .into_iter()
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect();
+
+            assert_eq!(kv_pair.len(), kv_pair_exp.len());
+            for i in 0..kv_pair.len() {
+                assert_eq!(kv_pair[i], kv_pair_exp[i]);
+            }
+        }
     }
 }

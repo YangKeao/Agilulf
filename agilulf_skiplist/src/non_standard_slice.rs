@@ -13,6 +13,15 @@ pub enum NonStandardSlice {
     MAX,
 }
 
+impl NonStandardSlice {
+    pub fn unwrap(self) -> Slice {
+        match self {
+            NonStandardSlice::Slice(slice) => slice,
+            _ => panic!(),
+        }
+    }
+}
+
 impl PartialOrd for NonStandardSlice {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self {

@@ -149,7 +149,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
         }
     }
 
-    pub fn find_key(&self, key: &T) -> (&T, &T) {
+    pub fn find_key(&self, key: &T) -> (*mut SkipListNode<T>, *mut SkipListNode<T>) {
         let head = self.head.last().unwrap(); // It's safe here
         let mut partial_skip_list = PartialSkipList::new(head);
 
@@ -161,7 +161,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
 
             if partial_skip_list.base_level() {
                 unsafe {
-                    return ((*prev_ptr).get_key(), (*next_ptr).get_key());
+                    return (prev_ptr, next_ptr);
                 }
             } else {
                 unsafe {
@@ -169,6 +169,24 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
                 }
             }
         }
+    }
+
+    pub fn read_key(&self, key: &T) -> &T {
+        let (prev, next) = self.find_key(key);
+        unsafe { (*prev).get_key() }
+    }
+
+    pub fn scan(&self, start: &T, end: &T) -> Vec<&T> {
+        let (prev, mut next) = self.find_key(start);
+        let mut ret = Vec::new();
+
+        unsafe {
+            while (*next).get_key() < end {
+                ret.push((*next).get_key());
+                next = (*next).get_succ().load(Ordering::SeqCst);
+            }
+        }
+        ret
     }
 
     pub fn insert(&self, key: &T) {
@@ -229,14 +247,13 @@ mod tests {
         }
 
         for i in 0..100 {
-            let (prev, succ) = skiplist.find_key(&(i * 2));
+            let prev = skiplist.read_key(&(i * 2));
 
             if i == 0 {
                 assert_eq!(prev, &std::i32::MIN);
             } else {
                 assert_eq!(prev, &((i - 1) * 2));
             }
-            assert_eq!(succ, &(i * 2));
         }
     }
 }

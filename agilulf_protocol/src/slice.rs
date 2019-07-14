@@ -5,6 +5,12 @@ use libc::memcmp;
 #[derive(Clone, Eq, Debug)]
 pub struct Slice(pub Vec<u8>);
 
+impl Default for Slice {
+    fn default() -> Self {
+        Slice(Vec::with_capacity(0))
+    }
+}
+
 impl PartialOrd for Slice {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if self.0.len() < other.0.len() {
