@@ -26,5 +26,6 @@ rand = "0.7"
 [workspace]
 members = [
     "agilulf_protocol",
-    "agilulf_driver"
+    "agilulf_driver",
+    "agilulf_skiplist"
 ]
