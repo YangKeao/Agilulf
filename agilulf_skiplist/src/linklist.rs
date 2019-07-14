@@ -3,60 +3,69 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 pub trait LinkNode<T>: Sized {
     fn new(key: &T) -> *mut Self;
 
-    fn get_prev(&self) -> AtomicPtr<Self>;
-
-    fn get_succ(&self) -> AtomicPtr<Self>;
+    fn get_succ(&self) -> &AtomicPtr<Self>;
 
     fn get_key(&self) -> &T;
 
-    fn set_next(&mut self, next: &AtomicPtr<Self>);
+    fn set_next(&mut self, next: *mut Self);
 }
 
 pub trait LinkList<T>: Sized
 where
     T: std::cmp::PartialOrd,
 {
-    type N: LinkNode<T>;
+    type Node: LinkNode<T>;
 
-    fn get_head(&self) -> AtomicPtr<Self::N>;
+    fn get_head(&self) -> &AtomicPtr<Self::Node>;
 
     fn insert(&self, key: &T) {
-        let new_node = Self::N::new(key);
+        let new_node = Self::Node::new(key);
 
         unsafe {
-            let mut succ = self.seek_greater(key);
-            let mut prev = (*succ.load(Ordering::Relaxed)).get_prev();
-            (*new_node).set_next(&succ);
+            let (mut prev, mut succ) = self.seek(key);
 
             loop {
-                if (*prev.load(Ordering::Relaxed))
+                (*new_node).set_next(succ.load(Ordering::AcqRel));
+
+                if (*prev.load(Ordering::AcqRel))
                     .get_succ()
                     .compare_exchange(
-                        succ.load(Ordering::Relaxed),
+                        succ.load(Ordering::AcqRel),
                         new_node,
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
+                        Ordering::AcqRel,
+                        Ordering::AcqRel,
                     )
                     .is_ok()
                 {
                     return;
                 } else {
-                    succ = self.seek_greater(key);
-                    prev = (*succ.load(Ordering::Relaxed)).get_prev();
+                    let res = self.seek_from(key, prev);
+                    prev = res.0;
+                    succ = res.1;
                 };
             }
         }
     }
 
-    fn seek_greater(&self, key: &T) -> AtomicPtr<Self::N> {
+    fn seek_from<'a>(
+        &self,
+        key: &T,
+        from: &'a AtomicPtr<Self::Node>,
+    ) -> (&'a AtomicPtr<Self::Node>, &'a AtomicPtr<Self::Node>) {
         unsafe {
-            let mut now = self.get_head();
+            let mut now: &AtomicPtr<Self::Node> = from;
+            let mut next: &AtomicPtr<Self::Node> = (*from.load(Ordering::AcqRel)).get_succ();
 
-            while (*now.load(Ordering::Relaxed)).get_key() < key {
-                now = (*now.load(Ordering::Relaxed)).get_succ();
+            while (*next.load(Ordering::AcqRel)).get_key() < key {
+                now = next;
+                next = (*next.load(Ordering::AcqRel)).get_succ();
             }
 
-            now
+            (now, next)
         }
+    }
+
+    fn seek<'a>(&self, key: &T) -> (&AtomicPtr<Self::Node>, &AtomicPtr<Self::Node>) {
+        self.seek_from(key, self.get_head())
     }
 }
