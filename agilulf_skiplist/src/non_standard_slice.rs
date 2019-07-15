@@ -25,6 +25,11 @@ impl NonStandardSlice {
 impl PartialOrd for NonStandardSlice {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self {
+            NonStandardSlice::Slice(slice) => match other {
+                NonStandardSlice::Slice(other) => slice.partial_cmp(&other),
+                NonStandardSlice::MIN => Some(Ordering::Greater),
+                NonStandardSlice::MAX => Some(Ordering::Less),
+            },
             NonStandardSlice::MIN => match other {
                 NonStandardSlice::MIN => Some(Ordering::Equal),
                 _ => Some(Ordering::Less),
@@ -32,11 +37,6 @@ impl PartialOrd for NonStandardSlice {
             NonStandardSlice::MAX => match other {
                 NonStandardSlice::MAX => Some(Ordering::Equal),
                 _ => Some(Ordering::Greater),
-            },
-            NonStandardSlice::Slice(slice) => match other {
-                NonStandardSlice::MIN => Some(Ordering::Greater),
-                NonStandardSlice::MAX => Some(Ordering::Less),
-                NonStandardSlice::Slice(other) => slice.partial_cmp(&other),
             },
         }
     }
