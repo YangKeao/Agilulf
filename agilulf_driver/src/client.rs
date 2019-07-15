@@ -152,16 +152,34 @@ impl MultiAgilulfClient {
     }
 
     pub async fn send_batch(&self, commands: Vec<Command>) -> Result<Vec<Reply>> {
-        let knight_ids: Vec<usize> = commands.iter().map(|command| self.allocate_task(command)).collect();
+        let commands: Vec<(usize, &Command)> = commands.iter().map(|command| (self.allocate_task(command), command)).collect();
 
         let mut futures = Vec::new();
-        for (index, command) in commands.into_iter().enumerate() {
-            futures.push(self.knights[knight_ids[index]].send(command));
+        for knight_id in 0..self.knights.len() {
+            futures.push(
+                self.knights[knight_id].send_batch(
+                    commands.iter().filter_map(|(command_id ,command)| {
+                        if knight_id == *command_id {
+                            Some((*command).clone())
+                        } else {
+                            None
+                        }
+                    }).collect()
+                )
+            )
+        }
+
+        let mut future_replies = Vec::new();
+        for reply in futures::future::join_all(futures).await {
+            future_replies.push(reply?.into_iter());
         }
 
         let mut replies = Vec::new();
-        for res in futures::future::join_all(futures).await {
-            replies.push(res?);
+        for (id, _) in commands.iter() {
+            match future_replies[*id].next() {
+                Some(reply) => replies.push(reply),
+                None => unreachable!()
+            }
         }
         Ok(replies)
     }
