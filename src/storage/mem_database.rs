@@ -1,11 +1,9 @@
 use super::{Database, Slice};
 use agilulf_protocol::error::database_error::{DatabaseError, Result};
 
-use std::collections::BTreeMap;
 use std::pin::Pin;
 
 use futures::Future;
-use futures::lock::Mutex;
 use agilulf_skiplist::skipmap::SkipMap;
 
 #[derive(Clone)]

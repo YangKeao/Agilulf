@@ -18,14 +18,12 @@ impl<T: Default + Clone> PartialOrd for Item<T> {
             Some(std::cmp::Ordering::Less)
         } else if self.key > other.key {
             Some(std::cmp::Ordering::Greater)
+        } else if self.serial_number < other.serial_number {
+            Some(std::cmp::Ordering::Less)
+        } else if self.serial_number > other.serial_number {
+            Some(std::cmp::Ordering::Greater)
         } else {
-            if self.serial_number < other.serial_number {
-                Some(std::cmp::Ordering::Less)
-            } else if self.serial_number > other.serial_number {
-                Some(std::cmp::Ordering::Greater)
-            } else {
-                Some(std::cmp::Ordering::Equal)
-            }
+            Some(std::cmp::Ordering::Equal)
         }
     }
 }
@@ -135,7 +133,7 @@ impl<T: Default + Clone> SkipMap<T> {
             },
             Bound::Unbounded => Item::max(),
         };
-        let mut data = self
+        let data = self
             .skiplist
             .scan(&start_item, &end_item)
             .into_iter()
@@ -163,9 +161,8 @@ mod tests {
     use agilulf_protocol::Slice;
     use rand::distributions::Standard;
     use rand::{thread_rng, Rng};
-    use std::collections::{BTreeMap, HashMap};
+    use std::collections::BTreeMap;
     use std::thread;
-    use std::thread::JoinHandle;
 
     fn generate_keys(num: usize) -> Vec<Vec<u8>> {
         (0..num)

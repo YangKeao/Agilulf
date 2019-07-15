@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use futures::executor::{self, ThreadPool};
-use futures::{StreamExt, SinkExt, Future, TryStreamExt};
+use futures::{StreamExt, SinkExt};
 use futures::task::{SpawnExt};
 use futures::io::AsyncReadExt;
 
@@ -10,13 +10,12 @@ use romio::{TcpListener, TcpStream};
 use log::{info};
 
 use super::error::{Result};
-use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer, Reply, GetCommand, Slice};
-use agilulf_protocol::{ProtocolError, Result as ProtocolResult};
+use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer};
+use agilulf_protocol::{Result as ProtocolResult};
 
 use agilulf_protocol::Command;
 use crate::storage::Database;
 use std::sync::Arc;
-use std::pin::Pin;
 
 pub struct Server {
     listener: TcpListener,
@@ -60,7 +59,7 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
 
     let (reader, writer) = stream.split();
     let mut command_stream = AsyncReadBuffer::new(reader).into_command_stream().fuse();
-    let mut reply_sink = AsyncWriteBuffer::new(writer).into_reply_sink();
+    let reply_sink = AsyncWriteBuffer::new(writer).into_reply_sink();
 
     let mut process_sink = reply_sink.with(|command: ProtocolResult<Command>| {
         Box::pin(async {
@@ -80,8 +79,12 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result
         })
     });
 
-    while let command = command_stream.select_next_some().await {
-        process_sink.send(command).await;
+    loop {
+        let command = command_stream.select_next_some().await;
+        if let Err(e) = process_sink.send(command).await {
+            println!("{:?}", e);
+            break;
+        }
     }
 
     info!("Closing stream from: {}", remote_addr);

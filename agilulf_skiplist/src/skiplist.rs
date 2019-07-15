@@ -3,7 +3,7 @@ use super::linklist::LinkNode;
 use super::non_standard_slice::NonStandard;
 use rand::Rng;
 use std::cmp::min;
-use std::ptr::{null, null_mut};
+use std::ptr::null_mut;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 const SKIPLIST_MAX_LEVEL: usize = 128;
@@ -20,13 +20,11 @@ impl<T: std::cmp::PartialOrd + Clone> SkipListNode<T> {
     }
 
     fn seek(&self, key: &T) -> (*mut SkipListNode<T>, *mut SkipListNode<T>) {
-        unsafe {
-            let now = AtomicPtr::new(self as *const SkipListNode<T> as *mut SkipListNode<T>);
-            let partial_skiplist = PartialSkipList::new(&now);
-            let ret = partial_skiplist.seek(key);
+        let now = AtomicPtr::new(self as *const SkipListNode<T> as *mut SkipListNode<T>);
+        let partial_skiplist = PartialSkipList::new(&now);
+        let ret = partial_skiplist.seek(key);
 
-            (ret.0.load(Ordering::SeqCst), ret.1.load(Ordering::SeqCst))
-        }
+        (ret.0.load(Ordering::SeqCst), ret.1.load(Ordering::SeqCst))
     }
 }
 
@@ -67,15 +65,6 @@ impl<'a, T: std::cmp::PartialOrd> PartialSkipList<'a, T> {
     fn base_level(&self) -> bool {
         unsafe { (*self.node.load(Ordering::SeqCst)).down.is_none() }
     }
-
-    fn down_stairs(&self) -> Option<PartialSkipList<'a, T>> {
-        unsafe {
-            (*self.node.load(Ordering::SeqCst))
-                .down
-                .as_ref()
-                .and_then(|node| Some(PartialSkipList { node }))
-        }
-    }
 }
 
 impl<T: std::cmp::PartialOrd + Clone> LinkList<T> for PartialSkipList<'_, T> {
@@ -86,9 +75,10 @@ impl<T: std::cmp::PartialOrd + Clone> LinkList<T> for PartialSkipList<'_, T> {
     }
 }
 
+#[derive(Default)]
 pub struct SkipList<T: std::cmp::PartialOrd + Clone + NonStandard> {
     head: Vec<AtomicPtr<SkipListNode<T>>>,
-    tail: Vec<AtomicPtr<SkipListNode<T>>>,
+    _tail: Vec<AtomicPtr<SkipListNode<T>>>,
 }
 
 fn generate_level() -> usize {
@@ -99,7 +89,7 @@ fn generate_level() -> usize {
         level += 1;
     }
 
-    return level;
+    level
 }
 
 impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
@@ -123,7 +113,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
             head.push(AtomicPtr::new(head_node));
             tail.push(AtomicPtr::new(tail_node));
         }
-        SkipList { head, tail }
+        SkipList { head, _tail: tail }
     }
 
     fn seek(&self, key: &T) -> Vec<(*mut SkipListNode<T>, *mut SkipListNode<T>)> {
@@ -160,9 +150,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
             };
 
             if partial_skip_list.base_level() {
-                unsafe {
-                    return (prev_ptr, next_ptr);
-                }
+                return (prev_ptr, next_ptr);
             } else {
                 unsafe {
                     partial_skip_list = PartialSkipList::new((*prev_ptr).down.as_ref().unwrap())
@@ -172,12 +160,12 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
     }
 
     pub fn read_key(&self, key: &T) -> &T {
-        let (prev, next) = self.find_key(key);
+        let (prev, _) = self.find_key(key);
         unsafe { (*prev).get_key() }
     }
 
     pub fn scan(&self, start: &T, end: &T) -> Vec<&T> {
-        let (prev, mut next) = self.find_key(start);
+        let (_, mut next) = self.find_key(start);
         let mut ret = Vec::new();
 
         unsafe {
@@ -214,7 +202,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
                         prev_level = new_node;
                         break;
                     } else {
-                        let res = unsafe { (*prev).seek(key) };
+                        let res = (*prev).seek(key);
                         prev = res.0;
                         succ = res.1;
                     }

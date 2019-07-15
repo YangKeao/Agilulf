@@ -65,7 +65,7 @@ where
         }
     }
 
-    fn seek<'a>(&self, key: &T) -> (&AtomicPtr<Self::Node>, &AtomicPtr<Self::Node>) {
+    fn seek(&self, key: &T) -> (&AtomicPtr<Self::Node>, &AtomicPtr<Self::Node>) {
         self.seek_from(key, self.get_head())
     }
 }
