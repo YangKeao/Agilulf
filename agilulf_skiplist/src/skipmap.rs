@@ -19,9 +19,9 @@ impl<T: Default + Clone> PartialOrd for Item<T> {
         } else if self.key > other.key {
             Some(std::cmp::Ordering::Greater)
         } else if self.serial_number < other.serial_number {
-            Some(std::cmp::Ordering::Less)
-        } else if self.serial_number > other.serial_number {
             Some(std::cmp::Ordering::Greater)
+        } else if self.serial_number > other.serial_number {
+            Some(std::cmp::Ordering::Less)
         } else {
             Some(std::cmp::Ordering::Equal)
         }
@@ -33,7 +33,7 @@ impl<T: Default + Clone> NonStandard for Item<T> {
         Item {
             key: NonStandardSlice::MIN,
             value: T::default(),
-            serial_number: std::u64::MIN,
+            serial_number: std::u64::MAX,
         }
     }
 
@@ -41,7 +41,7 @@ impl<T: Default + Clone> NonStandard for Item<T> {
         Item {
             key: NonStandardSlice::MAX,
             value: T::default(),
-            serial_number: std::u64::MAX,
+            serial_number: std::u64::MIN,
         }
     }
 }
@@ -66,7 +66,7 @@ impl<T: Default + Clone> Default for SkipMap<T> {
 impl<T: Default + Clone> SkipMap<T> {
     fn new(serial_number: u64) -> SkipMap<T> {
         SkipMap {
-            skiplist: SkipList::new(),
+            skiplist: SkipList::default(),
             serial_number: AtomicU64::new(serial_number),
         }
     }
@@ -111,12 +111,12 @@ impl<T: Default + Clone> SkipMap<T> {
             Bound::Included(bound) => Item {
                 key: NonStandardSlice::Slice(bound.clone()),
                 value: T::default(),
-                serial_number: 0,
+                serial_number: std::u64::MAX,
             },
             Bound::Excluded(bound) => Item {
                 key: NonStandardSlice::Slice(bound.clone()),
                 value: T::default(),
-                serial_number: std::u64::MAX,
+                serial_number: std::u64::MIN,
             },
             Bound::Unbounded => Item::min(),
         };
@@ -124,12 +124,12 @@ impl<T: Default + Clone> SkipMap<T> {
             Bound::Included(bound) => Item {
                 key: NonStandardSlice::Slice(bound.clone()),
                 value: T::default(),
-                serial_number: std::u64::MAX,
+                serial_number: std::u64::MIN,
             },
             Bound::Excluded(bound) => Item {
                 key: NonStandardSlice::Slice(bound.clone()),
                 value: T::default(),
-                serial_number: 0,
+                serial_number: std::u64::MAX,
             },
             Bound::Unbounded => Item::max(),
         };
@@ -137,15 +137,14 @@ impl<T: Default + Clone> SkipMap<T> {
             .skiplist
             .scan(&start_item, &end_item)
             .into_iter()
-            .map(|item| (&item.key, &item.value, &item.serial_number))
-            .rev();
+            .map(|item| (&item.key, &item.value, &item.serial_number));
 
         let mut ret = Vec::new();
-        let mut last_serial_number = -1;
-        for (key, value, serial_number) in data.rev() {
-            if (*serial_number as i32) != last_serial_number {
+        let mut last_key = &NonStandardSlice::MIN;
+        for (key, value, _) in data {
+            if last_key != key {
                 ret.push((key.clone().unwrap(), value.clone()));
-                last_serial_number = *serial_number as i32;
+                last_key = key;
             } else {
                 continue;
             }
@@ -174,6 +173,28 @@ mod tests {
         (0..num)
             .map(|_| thread_rng().sample_iter(&Standard).take(256).collect())
             .collect()
+    }
+
+    #[test]
+    fn simple_put_get_test() {
+        let map: SkipMap<Slice> = SkipMap::new(0);
+        map.insert(&Slice(b"key1".to_vec()), &Slice(b"value1".to_vec()));
+        map.insert(&Slice(b"key2".to_vec()), &Slice(b"value2".to_vec()));
+        map.insert(&Slice(b"key3".to_vec()), &Slice(b"value3".to_vec()));
+
+        assert_eq!(
+            map.find(&Slice(b"key1".to_vec())).unwrap(),
+            Slice(b"value1".to_vec())
+        );
+
+        map.insert(
+            &Slice(b"key1".to_vec()),
+            &Slice(b"modified_value1".to_vec()),
+        );
+        assert_eq!(
+            map.find(&Slice(b"key1".to_vec())).unwrap(),
+            Slice(b"modified_value1".to_vec())
+        );
     }
 
     #[test]
@@ -270,5 +291,35 @@ mod tests {
                 assert_eq!(kv_pair[i], kv_pair_exp[i]);
             }
         }
+    }
+
+    #[test]
+    fn update_test() {
+        let map: SkipMap<Slice> = SkipMap::new(0);
+        map.insert(&Slice(b"key1".to_vec()), &Slice(b"value1".to_vec()));
+        map.insert(&Slice(b"key2".to_vec()), &Slice(b"value2".to_vec()));
+        map.insert(&Slice(b"key3".to_vec()), &Slice(b"value3".to_vec()));
+
+        let scan_result = map.scan(Slice(b"key1".to_vec())..Slice(b"key3".to_vec()));
+        assert_eq!(
+            scan_result,
+            vec![
+                (Slice(b"key1".to_vec()), Slice(b"value1".to_vec())),
+                (Slice(b"key2".to_vec()), Slice(b"value2".to_vec()))
+            ]
+        );
+
+        map.insert(
+            &Slice(b"key1".to_vec()),
+            &Slice(b"modified_value1".to_vec()),
+        );
+        let scan_result = map.scan(Slice(b"key1".to_vec())..Slice(b"key3".to_vec()));
+        assert_eq!(
+            scan_result,
+            vec![
+                (Slice(b"key1".to_vec()), Slice(b"modified_value1".to_vec())),
+                (Slice(b"key2".to_vec()), Slice(b"value2".to_vec()))
+            ]
+        );
     }
 }

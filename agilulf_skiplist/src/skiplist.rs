@@ -161,8 +161,8 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
     }
 
     pub fn read_key(&self, key: &T) -> &T {
-        let (prev, _) = self.find_key(key);
-        unsafe { (*prev).get_key() }
+        let (_, next) = self.find_key(key);
+        unsafe { (*next).get_key() }
     }
 
     pub fn scan(&self, start: &T, end: &T) -> Vec<&T> {
@@ -216,7 +216,7 @@ impl<T: std::cmp::PartialOrd + Clone + NonStandard> SkipList<T> {
 impl<T: std::cmp::PartialOrd + Clone + NonStandard> Drop for SkipList<T> {
     fn drop(&mut self) {
         let mut now = self.head[0].load(Ordering::SeqCst);
-        while unsafe { (*now).get_key() < T::max() } {
+        while unsafe { (*now).get_key() < &T::max() } {
             let now_ptr = now.clone();
             let next_ptr = unsafe { (*now).get_succ().load(Ordering::SeqCst) };
 
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn skiplist_basic_test() {
-        let skiplist: SkipList<i32> = SkipList::new();
+        let skiplist: SkipList<i32> = SkipList::default();
 
         for i in 0..100 {
             skiplist.insert(&(i * 2));
@@ -256,11 +256,7 @@ mod tests {
         for i in 0..100 {
             let prev = skiplist.read_key(&(i * 2));
 
-            if i == 0 {
-                assert_eq!(prev, &std::i32::MIN);
-            } else {
-                assert_eq!(prev, &((i - 1) * 2));
-            }
+            assert_eq!(prev, &(i * 2));
         }
     }
 }
