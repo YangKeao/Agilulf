@@ -49,6 +49,14 @@ impl From<DatabaseResult<Vec<Slice>>> for Reply {
     }
 }
 
+impl From<Vec<(Slice, Slice)>> for Reply {
+    fn from(result: Vec<(Slice, Slice)>) -> Self {
+        Reply::MultipleSliceReply(result.into_iter().flat_map(|(key, value)| {
+            vec![key, value]
+        }).collect())
+    }
+}
+
 impl Into<Vec<u8>> for Reply {
     fn into(self) -> Vec<u8> {
         let mut reply: Vec<u8> = Vec::new();

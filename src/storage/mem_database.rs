@@ -45,15 +45,20 @@ impl Database for MemDatabase {
         })
     }
 
-    fn scan(&self, start: Slice, end: Slice) -> Pin<Box<dyn Future<Output = Result<Vec<Slice>>> + Send + '_>> {
-        unimplemented!();
-//        Box::pin(async move {
-//            Ok(self
-//                .inner
-//                .range(start..end)
-//                .map(|(key, _)| key.clone()) // TODO: clone here may be avoidable
-//                .collect())
-//        })
+    fn scan(&self, start: Slice, end: Slice) -> Pin<Box<dyn Future<Output = Vec<(Slice, Slice)>> + Send + '_>> {
+        Box::pin(async move {
+            self
+                .inner
+                .scan(start..end)
+                .into_iter()
+                .filter_map(|(key, value)| {
+                    match value {
+                        Value::Slice(value) => Some((key, value)),
+                        Value::NotExist => None,
+                    }
+                })
+                .collect()
+        })
     }
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {

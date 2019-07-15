@@ -18,7 +18,7 @@ pub trait Database: Send + Sync {
         &self,
         start: Slice,
         end: Slice,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<Slice>>> + Send + '_>>;
+    ) -> Pin<Box<dyn Future<Output = Vec<(Slice, Slice)>> + Send + '_>>;
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>>;
 }
