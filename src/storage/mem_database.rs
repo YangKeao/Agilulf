@@ -5,6 +5,8 @@ use std::pin::Pin;
 
 use futures::Future;
 use agilulf_skiplist::skipmap::SkipMap;
+use std::sync::atomic::AtomicPtr;
+use std::sync::atomic::Ordering;
 
 #[derive(Clone)]
 enum Value {
@@ -18,52 +20,78 @@ impl Default for Value {
     }
 }
 
-#[derive(Default)]
 pub struct MemDatabase {
-    inner: SkipMap<Value>,
+    inner: AtomicPtr<SkipMap<Value>>,
+}
+
+impl MemDatabase {
+
+}
+
+impl Default for MemDatabase {
+    fn default() -> Self {
+        MemDatabase {
+            inner: AtomicPtr::new(Box::into_raw(box SkipMap::default()))
+        }
+    }
+}
+
+impl Drop for MemDatabase {
+    fn drop(&mut self) {
+        let skip_map = self.inner.load(Ordering::SeqCst);
+        unsafe {
+            drop(Box::from_raw(skip_map))
+        }
+    }
 }
 
 impl Database for MemDatabase {
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<Slice>> + Send + '_>> {
         Box::pin(async move {
-            match self.inner.find(&key) {
-                Some(value) => {
-                    match value {
-                        Value::NotExist => Err(DatabaseError::KeyNotFound),
-                        Value::Slice(value) => Ok(value)
-                    }
-                },
-                None => Err(DatabaseError::KeyNotFound),
+            unsafe {
+                match (*self.inner.load(Ordering::SeqCst)).find(&key) {
+                    Some(value) => {
+                        match value {
+                            Value::NotExist => Err(DatabaseError::KeyNotFound),
+                            Value::Slice(value) => Ok(value)
+                        }
+                    },
+                    None => Err(DatabaseError::KeyNotFound),
+                }
             }
         })
     }
 
     fn put(&self, key: Slice, value: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         Box::pin(async move {
-            self.inner.insert(&key, &Value::Slice(value));
+            unsafe {
+                (*self.inner.load(Ordering::SeqCst)).insert(&key, &Value::Slice(value));
+            }
             Ok(())
         })
     }
 
     fn scan(&self, start: Slice, end: Slice) -> Pin<Box<dyn Future<Output = Vec<(Slice, Slice)>> + Send + '_>> {
         Box::pin(async move {
-            self
-                .inner
-                .scan(start..end)
-                .into_iter()
-                .filter_map(|(key, value)| {
-                    match value {
-                        Value::Slice(value) => Some((key, value)),
-                        Value::NotExist => None,
-                    }
-                })
-                .collect()
+            unsafe {
+                (*self
+                    .inner.load(Ordering::SeqCst))
+                    .scan(start..end)
+                    .into_iter()
+                    .filter_map(|(key, value)| {
+                        match value {
+                            Value::Slice(value) => Some((key, value)),
+                            Value::NotExist => None,
+                        }
+                    })
+                    .collect()
+            }
         })
     }
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         Box::pin(async move {
-            self.inner.insert(&key, &Value::NotExist);
+            unsafe {(*self.inner.load(Ordering::SeqCst)).insert(&key, &Value::NotExist);}
             Ok(())
         })
     }
