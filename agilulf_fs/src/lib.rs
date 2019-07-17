@@ -75,6 +75,7 @@ impl File {
         Ok(File { fd })
     }
 
+    //noinspection RsTypeCheck
     pub fn write<'a>(&self, offset: i64, buf: &'a [u8]) -> WriteFile<'a> {
         let mut aio_cb = AioCb::from_slice(
             self.fd,
