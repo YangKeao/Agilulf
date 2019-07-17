@@ -1,3 +1,5 @@
+#![feature(async_await)]
+
 #[macro_use]
 extern crate quick_error;
 #[macro_use]
@@ -135,5 +137,21 @@ mod test {
         reader.read_to_end(&mut buf);
 
         assert_eq!(buf.as_slice(), b"TEST_CONTENT");
+    }
+
+    #[test]
+    fn lifetime_test() {
+        let file = File::open("/tmp/test_file2").unwrap();
+        futures::executor::block_on(async move {
+            let content = b"TEST_CONTENT".to_vec();
+
+            file.write(0, content.as_slice());
+
+            let mut reader = std::fs::File::open("/tmp/test_file").unwrap();
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf);
+
+            assert_eq!(buf.as_slice(), b"TEST_CONTENT");
+        })
     }
 }
