@@ -12,4 +12,4 @@ quick-error = "1.2.2"
 futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nightly"] }
 memchr = "2"
 log = "0.4"
-libc = "0.2.51"
+libc = "0.2.60"
