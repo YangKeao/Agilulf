@@ -20,6 +20,7 @@ log = "0.4"
 env_logger = "0.6.2"
 agilulf_protocol = { path = "./agilulf_protocol" }
 agilulf_skiplist = {path = "./agilulf_skiplist"}
+agilulf_fs = {path = "./agilulf_fs"}
 memmap = "0.7.0"
 
 [dev-dependencies]

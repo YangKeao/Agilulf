@@ -50,7 +50,7 @@ pub struct File {
 }
 
 impl File {
-    fn open(path: &str) -> Result<Self> {
+    pub fn open(path: &str) -> Result<Self> {
         use fcntl::OFlag;
         use nix::sys::stat::Mode;
 
@@ -75,7 +75,7 @@ impl File {
         Ok(File { fd })
     }
 
-    fn write<'a>(&self, offset: i64, buf: &'a [u8]) -> WriteFile<'a> {
+    pub fn write<'a>(&self, offset: i64, buf: &'a [u8]) -> WriteFile<'a> {
         let mut aio_cb = AioCb::from_slice(
             self.fd,
             offset,
@@ -98,7 +98,7 @@ pub struct WriteFile<'a> {
 }
 
 impl<'a> Future for WriteFile<'a> {
-    type Output = ();
+    type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.get_mut();
@@ -117,13 +117,13 @@ impl<'a> Future for WriteFile<'a> {
             return Poll::Pending; // TODO: handle other error here
         } else {
             this.aio_cb.aio_return().unwrap(); // TODO: handle error here
-            return Poll::Ready(());
+            return Poll::Ready(Ok(()));
         }
     }
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use std::io::Read;
 
