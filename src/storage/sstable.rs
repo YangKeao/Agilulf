@@ -3,7 +3,7 @@ use agilulf_protocol::error::database_error::{DatabaseError, Result};
 use agilulf_protocol::Slice;
 use memmap::MmapOptions;
 use std::cmp::Ordering;
-use std::ops::Index;
+use std::ops::{Index, Range, IndexMut};
 use std::path::Path;
 
 pub trait SearchIndex:
@@ -78,6 +78,63 @@ impl From<MemDatabase> for SSTable {
     }
 }
 
+const PART_LENGTH: usize = 256 + 8;
+
+struct SliceMmap {
+    inner_mmap: memmap::Mmap,
+    inner_vec: Vec<(Slice, Slice)>
+}
+
+impl SliceMmap {
+    fn from_mmap(mmap: memmap::Mmap) -> Self {
+        unsafe {
+            let length = mmap.len() / PART_LENGTH;
+            let mut inner_vec= Vec::new();
+
+            for index in 0..length {
+                let key = Vec::from_raw_parts(
+                    mmap.index(PART_LENGTH * index) as *const u8 as *mut u8, // Note: don't write to this vector
+                    8,
+                    8
+                );
+                let value = Vec::from_raw_parts(
+                    mmap.index(PART_LENGTH * index + 8) as *const u8 as *mut u8, // Note: don't write to this vector
+                    256,
+                    256
+                );
+                inner_vec.push((Slice(key), Slice(value)));
+            }
+
+            SliceMmap {
+                inner_mmap: mmap,
+                inner_vec
+            }
+        }
+    }
+}
+
+impl SearchIndex for SliceMmap {
+    fn len(&self) -> usize {
+        self.inner_vec.len()
+    }
+}
+
+impl Index<std::ops::Range<usize>> for SliceMmap {
+    type Output = [(Slice, Slice)];
+
+    fn index(&self, index: Range<usize>) -> &Self::Output {
+        self.inner_vec.index(index)
+    }
+}
+
+impl Index<usize> for SliceMmap {
+    type Output = (Slice, Slice);
+
+    fn index(&self, index: usize) -> &Self::Output {
+        self.inner_vec.index(index)
+    }
+}
+
 quick_error! {
     #[derive(Debug)]
     pub enum SSTableError {
@@ -117,10 +174,11 @@ impl SSTable {
     }
 
     fn open(file: std::fs::File) -> SSTableResult<Self> {
-        let mmap = unsafe { MmapOptions::new().map(&file)? };
-        let length = mmap.len();
+        let mmap = box SliceMmap::from_mmap(unsafe {  MmapOptions::new().map(&file)? });
 
-        unimplemented!()
+        Ok(Self {
+            kv_pairs: mmap
+        })
     }
 }
 
@@ -147,5 +205,22 @@ mod tests {
         assert_eq!(&buf[5..8], vec![0; 3].as_slice());
         assert_eq!(&buf[8..13], b"WORLD");
         assert_eq!(&buf[13..(256 + 8)], vec![0; 251].as_slice());
+    }
+
+    #[test]
+    fn read_sstable() {
+        let db = MemDatabase::default();
+        SyncDatabase::put(&db, Slice(b"HELLO".to_vec()), Slice(b"WORLD".to_vec())).unwrap();
+
+        let sstable: SSTable = db.into();
+        futures::executor::block_on(async move {
+            sstable.save("/tmp/test_table").await.unwrap();
+        });
+
+        let file = std::fs::File::open("/tmp/test_table").unwrap();
+        let sstable = SSTable::open(file).unwrap();
+        let value = SyncDatabase::get(&sstable, Slice(b"HELLO\0\0\0".to_vec())).unwrap();
+
+        assert_eq!(&value.0[0..5], b"WORLD");
     }
 }
