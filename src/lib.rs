@@ -1,6 +1,7 @@
 #![feature(async_await)]
 #![feature(type_alias_enum_variants)]
 #![feature(test)]
+#![feature(box_syntax)]
 #![allow(clippy::needless_lifetimes)]
 
 extern crate test;
@@ -14,4 +15,4 @@ mod storage;
 pub use agilulf_protocol::Slice;
 pub use server::*;
 pub use storage::mem_database::MemDatabase;
-pub use storage::Database;
+pub use storage::AsyncDatabase;

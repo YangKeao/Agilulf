@@ -14,16 +14,16 @@ use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer};
 use agilulf_protocol::{Result as ProtocolResult};
 
 use agilulf_protocol::Command;
-use crate::storage::Database;
+use crate::storage::AsyncDatabase;
 use std::sync::Arc;
 
 pub struct Server {
     listener: TcpListener,
-    database: Arc<dyn Database>,
+    database: Arc<dyn AsyncDatabase>,
 }
 
 impl Server {
-    pub fn new(address: &str, database: impl Database + 'static) -> Result<Server> {
+    pub fn new(address: &str, database: impl AsyncDatabase + 'static) -> Result<Server> {
         let addr = address.parse::<SocketAddr>()?;
         let listener = TcpListener::bind(&addr)?;
 
@@ -53,7 +53,7 @@ impl Server {
     }
 }
 
-async fn handle_stream(stream: TcpStream, database: Arc<dyn Database>) -> Result<()> {
+async fn handle_stream(stream: TcpStream, database: Arc<dyn AsyncDatabase>) -> Result<()> {
     let remote_addr = stream.peer_addr()?; // TODO: handle error here
     info!("Accepting stream from: {}", remote_addr);
 
