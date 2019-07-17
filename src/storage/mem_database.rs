@@ -1,10 +1,7 @@
-use super::{AsyncDatabase, Slice, SyncDatabase};
+use super::{Slice, SyncDatabase};
 use agilulf_protocol::error::database_error::{DatabaseError, Result};
 
-use std::pin::Pin;
-
 use agilulf_skiplist::skipmap::SkipMap;
-use futures::Future;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
 

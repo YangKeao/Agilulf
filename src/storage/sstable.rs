@@ -1,10 +1,9 @@
-use super::{mem_database::MemDatabase, AsyncDatabase, SyncDatabase};
-use agilulf_protocol::error::database_error::{DatabaseError, Result};
+use super::{mem_database::MemDatabase, SyncDatabase};
+use agilulf_protocol::error::database_error::{Result};
 use agilulf_protocol::Slice;
 use memmap::MmapOptions;
 use std::cmp::Ordering;
-use std::ops::{Index, Range, IndexMut};
-use std::path::Path;
+use std::ops::{Index, Range};
 
 pub trait SearchIndex:
     Index<usize, Output = (Slice, Slice)>
@@ -138,10 +137,10 @@ impl Index<usize> for SliceMmap {
 quick_error! {
     #[derive(Debug)]
     pub enum SSTableError {
-        fs_error(err: agilulf_fs::error::FSError) {
+        FsError(err: agilulf_fs::error::FSError) {
             from()
         }
-        io_error(err: std::io::Error) {
+        IoError(err: std::io::Error) {
             from()
         }
     }
