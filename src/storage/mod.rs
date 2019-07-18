@@ -3,6 +3,7 @@ mod database;
 mod manifest_manager;
 mod database_log;
 mod sstable;
+mod merge;
 
 use agilulf_protocol::Slice;
 

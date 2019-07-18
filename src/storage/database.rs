@@ -11,6 +11,7 @@ use crossbeam::atomic::AtomicCell;
 use crossbeam::sync::ShardedLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use crate::storage::merge::merge_iter;
 
 pub struct DatabaseBuilder {
     base_dir: String,
@@ -135,7 +136,10 @@ impl AsyncDatabase for Database {
 
     fn scan(&self, start: Slice, end: Slice) -> Pin<Box<dyn Future<Output = Vec<(Slice, Slice)>> + Send + '_>> {
         Box::pin(async move {
-            self.mem_database.read().unwrap().scan_sync(start, end)
+            let mut merge_vec = Vec::new();
+            merge_vec.push(self.mem_database.read().unwrap().scan_sync(start, end).into_iter());
+
+            merge_iter(merge_vec).collect()
         })
     }
 
@@ -228,6 +232,29 @@ mod tests {
                 let value = database.get(Slice(keys[index].clone())).await.unwrap();
                 assert_eq!(value, Slice(values[index].clone()))
             }
+        })
+    }
+
+    #[test]
+    fn scan_test() {
+        let key = Slice(b"HELLO".to_vec());
+        let key = &key;
+
+        let database = DatabaseBuilder::default()
+            .restore(false)
+            .build().unwrap();
+
+        futures::executor::block_on(async move {
+            for index in 0..(5 * 1024) {
+                let value = Slice(format!("WORLD{}", index).into_bytes());
+
+                database.put(key.clone(), value).await.unwrap();
+            }
+
+            let ret = database.scan(Slice(b"HELL\0".to_vec()), Slice(b"HELLP".to_vec())).await;
+            assert_eq!(ret.len(), 1);
+            let value = Slice(format!("WORLD{}", (5 * 1024 - 1)).into_bytes());
+            assert_eq!(ret[0], (key.clone(), value));
         })
     }
 }
