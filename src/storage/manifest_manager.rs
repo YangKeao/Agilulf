@@ -1,7 +1,7 @@
 use super::database_log::DatabaseLog;
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
-use crate::MemDatabase;
+use crate::{MemDatabase, AsyncDatabase};
 use crossbeam::sync::ShardedLock;
 use futures::task::{Spawn, SpawnExt, LocalSpawn, LocalSpawnExt};
 use memmap::{MmapMut, MmapOptions};
@@ -13,6 +13,10 @@ use std::path::Path;
 use crossbeam::channel::{unbounded, Sender};
 use futures::stream::StreamExt;
 use futures::executor::LocalPool;
+use agilulf_protocol::Slice;
+use std::pin::Pin;
+use futures::Future;
+use crate::storage::SyncDatabase;
 
 #[repr(packed)]
 #[derive(Clone)]
@@ -141,5 +145,18 @@ impl ManifestManager {
         });
 
         sender
+    }
+
+    pub fn find_key(&self, key: Slice) -> Option<Slice> {
+        for level in 0..6 {
+            let level = self.sstables[level].read().unwrap();
+            for (id, table) in level.iter() {
+                match table.get_sync(key.clone()) {
+                    Ok(value) => return Some(value),
+                    Err(_) => {}
+                }
+            }
+        }
+        None
     }
 }

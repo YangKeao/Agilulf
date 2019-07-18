@@ -2,7 +2,7 @@ use super::database_log::DatabaseLog;
 use super::manifest_manager::ManifestManager;
 use super::mem_database::MemDatabase;
 use super::{AsyncDatabase, SyncDatabase};
-use agilulf_protocol::error::database_error::Result as DatabaseResult;
+use agilulf_protocol::error::database_error::{Result as DatabaseResult, DatabaseError};
 use agilulf_protocol::Slice;
 use futures::{Future, SinkExt};
 use std::pin::Pin;
@@ -146,9 +146,13 @@ impl AsyncDatabase for Database {
                     let try_ret = db.get_sync(key.clone());
                     if try_ret.is_ok() {
                         return try_ret;
-                    } else {
                     }
                 }
+
+                match self.manifest_manager.find_key(key.clone()) {
+                    Some(value) => return Ok(value),
+                    None => return Err(DatabaseError::KeyNotFound)
+                };
             }
 
             ret

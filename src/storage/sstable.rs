@@ -1,5 +1,5 @@
 use super::{mem_database::MemDatabase, SyncDatabase};
-use agilulf_protocol::error::database_error::{Result};
+use agilulf_protocol::error::database_error::{Result, DatabaseError};
 use agilulf_protocol::Slice;
 use memmap::MmapOptions;
 use std::cmp::Ordering;
@@ -51,7 +51,11 @@ impl SyncDatabase for SSTable {
     fn get_sync(&self, key: Slice) -> Result<Slice> {
         let index = self.kv_pairs.binary_search_by_key(&key);
 
-        Ok(self.kv_pairs[index].1.clone())
+        if self.kv_pairs[index].0.cmp(&key) == Ordering::Equal {
+            Ok(self.kv_pairs[index].1.clone())
+        } else {
+            Err(DatabaseError::KeyNotFound)
+        }
     }
 
     fn put_sync(&self, _: Slice, _: Slice) -> Result<()> {
