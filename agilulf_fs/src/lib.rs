@@ -91,8 +91,10 @@ impl File {
     }
 
     //noinspection RsTypeCheck
-    pub fn fallocate(&self, offset: i64, len: i64) {
-        fcntl::fallocate(self.fd, fcntl::FallocateFlags::empty(), offset, len);
+    pub fn fallocate(&self, offset: i64, len: i64) -> Result<()> {
+        fcntl::fallocate(self.fd, fcntl::FallocateFlags::empty(), offset, len)?;
+
+        Ok(())
     }
 }
 
@@ -139,11 +141,11 @@ mod tests {
     #[test]
     fn write_test() {
         let file = File::open("/tmp/test_file").unwrap();
-        futures::executor::block_on(file.write(0, b"TEST_CONTENT"));
+        futures::executor::block_on(file.write(0, b"TEST_CONTENT")).unwrap();
 
         let mut reader = std::fs::File::open("/tmp/test_file").unwrap();
         let mut buf = Vec::new();
-        reader.read_to_end(&mut buf);
+        reader.read_to_end(&mut buf).unwrap();
 
         assert_eq!(buf.as_slice(), b"TEST_CONTENT");
     }
@@ -154,11 +156,11 @@ mod tests {
         futures::executor::block_on(async move {
             let content = b"TEST_CONTENT".to_vec();
 
-            file.write(0, content.as_slice()).await;
+            file.write(0, content.as_slice()).await.unwrap();
 
             let mut reader = std::fs::File::open("/tmp/test_file2").unwrap();
             let mut buf = Vec::new();
-            reader.read_to_end(&mut buf);
+            reader.read_to_end(&mut buf).unwrap();
 
             assert_eq!(buf.as_slice(), b"TEST_CONTENT");
         })

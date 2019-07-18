@@ -225,7 +225,7 @@ mod tests {
 
         let mut reader = std::fs::File::open("/tmp/test_table").unwrap();
         let mut buf = Vec::new();
-        reader.read_to_end(&mut buf);
+        reader.read_to_end(&mut buf).unwrap();
 
         assert_eq!(&buf[0..5], b"HELLO");
         assert_eq!(&buf[5..8], vec![0; 3].as_slice());
