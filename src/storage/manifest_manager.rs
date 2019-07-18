@@ -1,12 +1,18 @@
 use super::database_log::DatabaseLog;
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
+use crate::MemDatabase;
 use crossbeam::sync::ShardedLock;
-use futures::task::Spawn;
+use futures::task::{Spawn, SpawnExt, LocalSpawn, LocalSpawnExt};
 use memmap::{MmapMut, MmapOptions};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::AtomicUsize;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
+use std::path::Path;
+use crossbeam::channel::{unbounded, Sender};
+use futures::stream::StreamExt;
+use futures::executor::LocalPool;
 
 #[repr(packed)]
 #[derive(Clone)]
@@ -31,18 +37,109 @@ impl JudgeReal for RawManifestLogEntry {
     }
 }
 
-pub struct ManifestLog {
-    log_manager: LogManager<RawManifestLogEntry>,
-}
-
-impl ManifestLog {}
-
 pub struct ManifestManager {
-    sstables: ShardedLock<BTreeMap<usize, BTreeMap<usize, SSTable>>>, // TODO: a concurrent RwLock may be better
+    base_dir: String,
+    log_manager: LogManager<RawManifestLogEntry>,
+    frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
+    sstables: Arc<[ShardedLock<BTreeMap<usize, SSTable>>; 6]>, // TODO: a concurrent RwLock may be better
+    level_counter: Arc<[AtomicUsize; 6]>
 }
 
 impl ManifestManager {
-    fn compact<S: Spawn>(&self, spawner: S) {}
+    pub fn create_new(
+        base_dir: &str,
+        frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
+    ) -> ManifestManager {
+        let base_path = Path::new(base_dir); // TODO: handle error here
+        let base_path = base_path.join("MANIFEST");
 
-    fn freeze(&self) {}
+        let manifest_path = base_path.to_str().unwrap();
+
+        ManifestManager {
+            base_dir: base_dir.to_string(),
+            log_manager: LogManager::create_new(manifest_path, 4 * 1024).unwrap(), // TODO: handle error here
+            frozen_databases,
+            sstables: Arc::new([ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new())]),
+            level_counter: Arc::new([AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0)]) // TODO: use macro to avoid these redundant codes
+        }
+    }
+
+    pub fn open(
+        base_dir: &str,
+        frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
+    ) -> ManifestManager {
+        let base_path = Path::new(base_dir); // TODO: handle error here
+        let base_path = base_path.join("MANIFEST");
+
+        let manifest_path = base_path.to_str().unwrap();
+
+        ManifestManager {
+            base_dir: base_dir.to_string(),
+            log_manager: LogManager::open(manifest_path, 4 * 1024).unwrap(), // TODO: handle error here
+            frozen_databases,
+            sstables: Arc::new([ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new())]),
+            level_counter: Arc::new([AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+                AtomicUsize::new(0)]) // TODO: restore sstables and level_counter from log
+        }
+    }
+
+    fn compact<S: Spawn>(&self, mut spawner: S) {}
+
+    pub fn freeze(&self) -> Sender<()> {
+        let frozen_databases = self.frozen_databases.clone();
+
+        let (sender, mut receiver) = unbounded::<()>();
+
+        let base_dir = self.base_dir.clone();
+        let level_counter = self.level_counter.clone();
+        let sstables = self.sstables.clone();
+
+        std::thread::spawn(move || {
+            futures::executor::block_on(async move {
+                let base_path = Path::new(&base_dir);
+                loop {
+                    receiver.recv();
+                    let db_guard = frozen_databases.read().unwrap();
+                    match db_guard.back() {
+                        Some(db) => {
+                            let sstable = SSTable::from(db.clone());
+                            drop(db_guard);
+
+                            let id = level_counter[0].fetch_add(1, Ordering::SeqCst);
+
+                            let table_path = base_path.join(format!{"0_{}", id});
+                            sstable.save(table_path.to_str().unwrap()).await; // TODO: handle error here
+
+                            sstables[0].write().unwrap().insert(id, sstable);
+                            frozen_databases.write().unwrap().pop_back();
+                        }
+                        None => {
+
+                        }
+                    }
+                }
+            })
+        });
+
+        sender
+    }
 }

@@ -4,6 +4,7 @@ use agilulf_protocol::Slice;
 use memmap::MmapOptions;
 use std::cmp::Ordering;
 use std::ops::{Index, Range};
+use std::borrow::Borrow;
 
 pub trait SearchIndex:
     Index<usize, Output = (Slice, Slice)>
@@ -74,12 +75,10 @@ impl SearchIndex for Vec<(Slice, Slice)> {
     }
 }
 
-impl From<MemDatabase> for SSTable {
-    fn from(mem_database: MemDatabase) -> Self {
-        let kv_pairs: Box<Vec<(Slice, Slice)>> =
-            box SyncDatabase::scan_sync(&mem_database, Slice(Vec::new()), Slice(vec![255; 8]))
-                .into_iter()
-                .collect();
+impl<T: Borrow<MemDatabase>> From<T> for SSTable {
+    fn from(mem_database: T) -> Self {
+        let kv_pairs: Box<Vec<(Slice, Slice)>> = box mem_database.borrow().scan_sync(Slice(Vec::new()), Slice(vec![255; 8])).into_iter()
+            .collect();
 
         Self { kv_pairs }
     }
@@ -170,7 +169,7 @@ impl SSTable {
         buf
     }
 
-    async fn save<'a>(&'a self, path: &'a str) -> SSTableResult<()> {
+    pub async fn save<'a>(&'a self, path: &'a str) -> SSTableResult<()> {
         use agilulf_fs::File;
         let file = File::open(path)?;
 

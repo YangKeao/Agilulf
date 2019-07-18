@@ -4,7 +4,7 @@ use super::mem_database::MemDatabase;
 use super::{AsyncDatabase, SyncDatabase};
 use agilulf_protocol::error::database_error::Result as DatabaseResult;
 use agilulf_protocol::Slice;
-use futures::Future;
+use futures::{Future, SinkExt};
 use std::pin::Pin;
 use std::path::Path;
 use crossbeam::atomic::AtomicCell;
@@ -13,6 +13,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use crate::storage::merge::merge_iter;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use crossbeam::channel::{unbounded, Sender};
 
 pub struct DatabaseBuilder {
     base_dir: String,
@@ -78,31 +79,45 @@ impl DatabaseBuilder {
             MemDatabase::default()
         };
 
+        let frozen_databases_queue = Arc::new(ShardedLock::new(VecDeque::new()));
+
+        let manifest_manager = if self.restore {
+            ManifestManager::open(self.base_dir.as_str(), frozen_databases_queue.clone())
+        } else {
+            ManifestManager::create_new(self.base_dir.as_str(), frozen_databases_queue.clone())
+        };
+        let freeze_notifier = manifest_manager.freeze();
+
         Ok(Database {
-            frozen_databases: ShardedLock::new(VecDeque::new()),
+            frozen_databases: frozen_databases_queue,
             mem_database: ShardedLock::new(Arc::new(mem_database)),
             database_log: ShardedLock::new(Arc::new(database_log)),
             base_dir: self.base_dir.to_string(),
             log_counter: AtomicUsize::new(0),
+            manifest_manager,
+            freeze_notifier,
         })
     }
 }
 
 pub struct Database {
-    frozen_databases: ShardedLock<VecDeque<Arc<MemDatabase>>>,
+    frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
     mem_database: ShardedLock<Arc<MemDatabase>>,
     database_log: ShardedLock<Arc<DatabaseLog>>,
     base_dir: String,
     log_counter: AtomicUsize,
+    manifest_manager: ManifestManager,
+    freeze_notifier: Sender<()>,
 }
 
 impl Database {
     fn check_mem_database(&self) {
         if self.mem_database.read().unwrap().large_enough() {
-            let base_path = Path::new(&self.base_dir); // TODO: handle error here
+            let base_path = Path::new(&self.base_dir);
 
             let old_database = self.mem_database.read().unwrap().clone();
             let mut frozen_queue  = self.frozen_databases.write().unwrap();
+            self.freeze_notifier.send(());
 
             let new_database = MemDatabase::default();
             self.mem_database.write().unwrap().clone_from(&Arc::new(new_database));
@@ -131,6 +146,7 @@ impl AsyncDatabase for Database {
                     let try_ret = db.get_sync(key.clone());
                     if try_ret.is_ok() {
                         return try_ret;
+                    } else {
                     }
                 }
             }
