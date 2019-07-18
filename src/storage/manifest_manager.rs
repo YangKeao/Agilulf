@@ -117,32 +117,37 @@ impl ManifestManager {
         let level_counter = self.level_counter.clone();
         let sstables = self.sstables.clone();
 
-        std::thread::spawn(move || {
-            futures::executor::block_on(async move {
-                let base_path = Path::new(&base_dir);
-                loop {
-                    receiver.recv();
-                    let db_guard = frozen_databases.read().unwrap();
-                    match db_guard.back() {
-                        Some(db) => {
-                            let sstable = SSTable::from(db.clone());
-                            drop(db_guard);
+        std::thread::Builder::new()
+            .name("background_worker".to_string())
+            .spawn(move || {
+                let mut local_pool = LocalPool::new();
+                local_pool.spawner().spawn_local(async move {
+                    let base_path = Path::new(&base_dir);
+                    loop {
+                        receiver.recv();
+                        let db_guard = frozen_databases.read().unwrap();
+                        match db_guard.back() {
+                            Some(db) => {
+                                let sstable = SSTable::from(db.clone());
+                                drop(db_guard);
 
-                            let id = level_counter[0].fetch_add(1, Ordering::SeqCst);
+                                let id = level_counter[0].fetch_add(1, Ordering::SeqCst);
 
-                            let table_path = base_path.join(format!{"0_{}", id});
-                            sstable.save(table_path.to_str().unwrap()).await; // TODO: handle error here
+                                let table_path = base_path.join(format!{"0_{}", id});
+                                sstable.save(table_path.to_str().unwrap()).await; // TODO: handle error here
 
-                            sstables[0].write().unwrap().insert(id, sstable);
-                            frozen_databases.write().unwrap().pop_back();
-                        }
-                        None => {
+                                sstables[0].write().unwrap().insert(id, sstable);
+                                frozen_databases.write().unwrap().pop_back();
+                            }
+                            None => {
 
+                            }
                         }
                     }
-                }
-            })
-        });
+                });
+
+                local_pool.run()
+            }).unwrap();
 
         sender
     }
