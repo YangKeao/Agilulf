@@ -12,6 +12,7 @@ use crossbeam::sync::ShardedLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use crate::storage::merge::merge_iter;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct DatabaseBuilder {
     base_dir: String,
@@ -36,15 +37,15 @@ quick_error! {
 pub type BuildResult<T> = std::result::Result<T, BuildError>;
 
 impl DatabaseBuilder {
-    fn restore(&mut self, restore: bool) -> &mut Self {
+    pub fn restore(&mut self, restore: bool) -> &mut Self {
         self.restore = restore;
         self
     }
-    fn base_dir(&mut self, base_dir: String) -> &mut Self {
+    pub fn base_dir(&mut self, base_dir: String) -> &mut Self {
         self.base_dir = base_dir;
         self
     }
-    fn build(&self) -> BuildResult<Database> {
+    pub fn build(&self) -> BuildResult<Database> {
         let base_path = Path::new(&self.base_dir); // TODO: handle error here
 
         let log_path = base_path.join("log");
@@ -80,7 +81,9 @@ impl DatabaseBuilder {
         Ok(Database {
             frozen_databases: ShardedLock::new(VecDeque::new()),
             mem_database: ShardedLock::new(Arc::new(mem_database)),
-            database_log
+            database_log: ShardedLock::new(Arc::new(database_log)),
+            base_dir: self.base_dir.to_string(),
+            log_counter: AtomicUsize::new(0),
         })
     }
 }
@@ -88,17 +91,30 @@ impl DatabaseBuilder {
 pub struct Database {
     frozen_databases: ShardedLock<VecDeque<Arc<MemDatabase>>>,
     mem_database: ShardedLock<Arc<MemDatabase>>,
-    database_log: DatabaseLog,
+    database_log: ShardedLock<Arc<DatabaseLog>>,
+    base_dir: String,
+    log_counter: AtomicUsize,
 }
 
 impl Database {
     fn check_mem_database(&self) {
         if self.mem_database.read().unwrap().large_enough() {
+            let base_path = Path::new(&self.base_dir); // TODO: handle error here
+
             let old_database = self.mem_database.read().unwrap().clone();
             let mut frozen_queue  = self.frozen_databases.write().unwrap();
 
             let new_database = MemDatabase::default();
             self.mem_database.write().unwrap().clone_from(&Arc::new(new_database));
+
+            let new_log_path = base_path.join(format!("log.{}", self.log_counter.fetch_add(1, Ordering::SeqCst)));
+            let new_log_path = new_log_path.to_str().unwrap(); // TODO: handle error here
+            self.database_log.read().unwrap().rename(new_log_path);
+
+            let log_path = base_path.join("log");
+            let log_path = log_path.to_str().unwrap(); // TODO: handle error here
+            let new_log = DatabaseLog::create_new(log_path, 4 * 1024 * 2).unwrap(); // TODO: handle error here
+            self.database_log.write().unwrap().clone_from(&Arc::new(new_log));
 
             frozen_queue.push_front(old_database);
         }
@@ -125,7 +141,7 @@ impl AsyncDatabase for Database {
 
     fn put(&self, key: Slice, value: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
-            self.database_log.put_sync(key.clone(), value.clone());
+            self.database_log.read().unwrap().put_sync(key.clone(), value.clone());
             let ret = self.mem_database.read().unwrap().put_sync(key, value);
 
             self.check_mem_database();
@@ -145,7 +161,7 @@ impl AsyncDatabase for Database {
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
-            self.database_log.delete_sync(key.clone());
+            self.database_log.read().unwrap().delete_sync(key.clone());
             let ret = self.mem_database.read().unwrap().delete_sync(key);
 
             self.check_mem_database();

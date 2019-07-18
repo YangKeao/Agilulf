@@ -48,6 +48,7 @@ pub struct LogManager<T: JudgeReal + Clone> {
     inner_mmap: MmapMut,
     index: AtomicUsize,
     phantom: PhantomData<T>,
+    path: String,
 }
 
 impl<T: JudgeReal + Clone> LogManager<T> {
@@ -92,6 +93,7 @@ impl<T: JudgeReal + Clone> LogManager<T> {
             inner_mmap: mmap,
             index: AtomicUsize::new(index),
             phantom: PhantomData,
+            path: path.to_string(),
         })
     }
 
@@ -111,5 +113,10 @@ impl<T: JudgeReal + Clone> LogManager<T> {
                 self.inner_mmap[(index * size_of::<T>())..].as_ref() as *const [u8] as *mut T;
             (*record).clone_from(&data);
         }
+    }
+
+    pub fn rename(&self, new_path: &str) -> Result<()> {
+        std::fs::rename(self.path.as_str(), new_path)?;
+        Ok(())
     }
 }

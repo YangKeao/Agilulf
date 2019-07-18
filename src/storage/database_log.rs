@@ -77,6 +77,10 @@ impl DatabaseLog {
             log_iter: self.log_manager.iter(),
         }
     }
+
+    pub fn rename(&self, new_path: &str) -> Result<()> {
+        self.log_manager.rename(new_path)
+    }
 }
 
 impl SyncDatabase for DatabaseLog {

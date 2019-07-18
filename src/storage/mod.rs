@@ -12,6 +12,8 @@ use futures::Future;
 use std::pin::Pin;
 use crate::storage::database_log::DatabaseLog;
 
+pub use database::{DatabaseBuilder, Database};
+
 pub trait SyncDatabase: Send + Sync {
     fn get_sync(&self, key: Slice) -> Result<Slice>;
 
