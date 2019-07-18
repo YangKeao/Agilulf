@@ -57,7 +57,7 @@ impl File {
         let fd = fcntl::open(
             path,
             OFlag::O_RDWR | OFlag::O_CREAT,
-            Mode::S_IRUSR | Mode::S_IWUSR
+            Mode::S_IRUSR | Mode::S_IWUSR,
         )?;
 
         AIO_SIGNAL_HANDLER.call_once(|| {

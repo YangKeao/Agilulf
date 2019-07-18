@@ -1,13 +1,13 @@
-use super::{DatabaseResult, Slice, AsyncReadBuffer, Result, ProtocolError};
-use super::message::{MessageHead, PartHead};
-use futures::{AsyncWrite, AsyncRead, Stream, Poll, Future, Sink, SinkExt, AsyncWriteExt};
 use super::async_buffer::AsyncWriteBuffer;
-use futures::task::Context;
-use std::pin::Pin;
+use super::message::{MessageHead, PartHead};
+use super::{AsyncReadBuffer, DatabaseResult, ProtocolError, Result, Slice};
 use crate::Command;
 use futures::stream::iter;
+use futures::task::Context;
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt, Future, Poll, Sink, SinkExt, Stream};
 use std::collections::VecDeque;
 use std::error::Error;
+use std::pin::Pin;
 
 #[derive(PartialEq, Debug)]
 pub enum Status {
@@ -51,9 +51,12 @@ impl From<DatabaseResult<Vec<Slice>>> for Reply {
 
 impl From<Vec<(Slice, Slice)>> for Reply {
     fn from(result: Vec<(Slice, Slice)>) -> Self {
-        Reply::MultipleSliceReply(result.into_iter().flat_map(|(key, value)| {
-            vec![key, value]
-        }).collect())
+        Reply::MultipleSliceReply(
+            result
+                .into_iter()
+                .flat_map(|(key, value)| vec![key, value])
+                .collect(),
+        )
     }
 }
 
@@ -93,7 +96,9 @@ async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Resul
     if first_line[0] == b'+' {
         Ok(Reply::StatusReply(Status::OK))
     } else if first_line[0] == b'-' {
-        Ok(Reply::ErrorReply(std::str::from_utf8(&first_line[1..])?.to_owned()))
+        Ok(Reply::ErrorReply(
+            std::str::from_utf8(&first_line[1..])?.to_owned(),
+        ))
     } else if first_line[0] == b'*' {
         let mut slices = Vec::new();
 
@@ -102,7 +107,7 @@ async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Resul
             let part = buf.read_line().await?;
             let head = PartHead::from_buf(part)?;
             let mut content = buf.read_exact(head.size + 2).await?; // 2 for \r\n
-            let content = content.drain(0..content.len()-2).collect();
+            let content = content.drain(0..content.len() - 2).collect();
 
             slices.push(Slice(content));
         }
@@ -111,7 +116,7 @@ async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Resul
     } else if first_line[0] == b'$' {
         let head = PartHead::from_buf(first_line)?;
         let mut content = buf.read_exact(head.size + 2).await?; // 2 for \r\n
-        let content = content.drain(0..content.len()-2).collect();
+        let content = content.drain(0..content.len() - 2).collect();
 
         Ok(Reply::SliceReply(Slice(content)))
     } else {
@@ -120,8 +125,8 @@ async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Resul
 }
 
 impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
-    pub fn into_reply_stream(self) -> impl Stream<Item = Result<Reply>>  {
-        futures::stream::unfold(self,   |mut buffer| {
+    pub fn into_reply_stream(self) -> impl Stream<Item = Result<Reply>> {
+        futures::stream::unfold(self, |mut buffer| {
             let future = async move {
                 let command = read_reply(&mut buffer).await;
                 Some((command, buffer))
@@ -132,7 +137,7 @@ impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
 }
 
 impl<T: AsyncWrite + Unpin + 'static> AsyncWriteBuffer<T> {
-    pub fn into_reply_sink(self) -> impl Sink<Reply, Error=ProtocolError> {
+    pub fn into_reply_sink(self) -> impl Sink<Reply, Error = ProtocolError> {
         self.stream.into_sink().with(|reply: Reply| {
             let mut reply: Vec<u8> = reply.into();
             futures::future::ready(Result::Ok(reply))

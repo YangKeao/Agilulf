@@ -1,12 +1,14 @@
-use super::{Slice, ProtocolError, AsyncReadBuffer, Result };
 use super::message::{MessageHead, PartHead};
-use futures::{AsyncRead, Poll, Stream, AsyncWrite};
-use std::pin::Pin;
+use super::{AsyncReadBuffer, ProtocolError, Result, Slice};
 use futures::task::Context;
 use futures::Future;
 use futures::FutureExt;
+use futures::{AsyncRead, AsyncWrite, Poll, Stream};
+use std::pin::Pin;
 
-pub async fn read_message<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Vec<Vec<u8>>> {
+pub async fn read_message<T: AsyncRead + Unpin>(
+    buf: &mut AsyncReadBuffer<T>,
+) -> Result<Vec<Vec<u8>>> {
     let mut message = Vec::new();
 
     let line = buf.read_line().await?;
@@ -15,7 +17,7 @@ pub async fn read_message<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) ->
         let part = buf.read_line().await?;
         let head = PartHead::from_buf(part)?;
         let mut content = buf.read_exact(head.size + 2).await?; // 2 for \r\n
-        let content = content.drain(0..content.len()-2).collect();
+        let content = content.drain(0..content.len() - 2).collect();
 
         message.push(content);
     }
@@ -26,12 +28,12 @@ pub async fn read_message<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) ->
 #[derive(Clone)]
 pub struct PutCommand {
     pub key: Slice,
-    pub value: Slice
+    pub value: Slice,
 }
 
 #[derive(Clone)]
 pub struct GetCommand {
-    pub key: Slice
+    pub key: Slice,
 }
 
 #[derive(Clone)]
@@ -50,7 +52,7 @@ pub enum Command {
     PUT(PutCommand),
     GET(GetCommand),
     DELETE(DeleteCommand),
-    SCAN(ScanCommand)
+    SCAN(ScanCommand),
 }
 
 impl Command {
@@ -61,47 +63,45 @@ impl Command {
                 if message.len() == 3 {
                     let value = Slice(message.remove(2));
                     let key = Slice(message.remove(1));
-                    Ok(Command::PUT(PutCommand {
-                        key,
-                        value,
-                    }))
+                    Ok(Command::PUT(PutCommand { key, value }))
                 } else {
-                    Err(ProtocolError::GrammarCheckFailed("PUT should have two arguments"))
+                    Err(ProtocolError::GrammarCheckFailed(
+                        "PUT should have two arguments",
+                    ))
                 }
             }
             "GET" => {
                 if message.len() == 2 {
                     let key = Slice(message.remove(1));
-                    Ok(Command::GET(GetCommand {
-                        key,
-                    }))
+                    Ok(Command::GET(GetCommand { key }))
                 } else {
-                    Err(ProtocolError::GrammarCheckFailed("GET should have one argument"))
+                    Err(ProtocolError::GrammarCheckFailed(
+                        "GET should have one argument",
+                    ))
                 }
             }
             "DELETE" => {
                 if message.len() == 2 {
                     let key = Slice(message.remove(1));
-                    Ok(Command::DELETE(DeleteCommand {
-                        key,
-                    }))
+                    Ok(Command::DELETE(DeleteCommand { key }))
                 } else {
-                    Err(ProtocolError::GrammarCheckFailed("DELETE should have one argument"))
+                    Err(ProtocolError::GrammarCheckFailed(
+                        "DELETE should have one argument",
+                    ))
                 }
             }
             "SCAN" => {
                 if message.len() == 3 {
                     let end = Slice(message.remove(2));
                     let start = Slice(message.remove(1));
-                    Ok(Command::SCAN(ScanCommand {
-                        start,
-                        end,
-                    }))
+                    Ok(Command::SCAN(ScanCommand { start, end }))
                 } else {
-                    Err(ProtocolError::GrammarCheckFailed("SCAN should have two arguments"))
+                    Err(ProtocolError::GrammarCheckFailed(
+                        "SCAN should have two arguments",
+                    ))
                 }
             }
-            _ => Err(ProtocolError::CommandNotSupport(command))
+            _ => Err(ProtocolError::CommandNotSupport(command)),
         }
     }
 }
@@ -118,9 +118,7 @@ trait AppendSlice {
 
 impl AppendSlice for Vec<u8> {
     fn append_part(&mut self, slice: &[u8]) {
-        self.extend_from_slice((PartHead {
-            size: slice.len()
-        }).into_bytes().as_slice());
+        self.extend_from_slice((PartHead { size: slice.len() }).into_bytes().as_slice());
         self.extend_from_slice(slice);
         self.extend_from_slice(b"\r\n");
     }
@@ -131,34 +129,26 @@ impl Into<Vec<u8>> for Command {
         let mut message = Vec::new();
         match self {
             Command::PUT(command) => {
-                message.extend_from_slice((MessageHead {
-                    count: 3
-                }).into_bytes().as_slice());
+                message.extend_from_slice((MessageHead { count: 3 }).into_bytes().as_slice());
 
                 message.append_part(b"PUT");
                 message.append_part(command.key.0.as_slice());
                 message.append_part(command.value.0.as_slice());
             }
             Command::GET(command) => {
-                message.extend_from_slice((MessageHead {
-                    count: 2
-                }).into_bytes().as_slice());
+                message.extend_from_slice((MessageHead { count: 2 }).into_bytes().as_slice());
 
                 message.append_part(b"GET");
                 message.append_part(command.key.0.as_slice());
             }
             Command::DELETE(command) => {
-                message.extend_from_slice((MessageHead {
-                    count: 2
-                }).into_bytes().as_slice());
+                message.extend_from_slice((MessageHead { count: 2 }).into_bytes().as_slice());
 
                 message.append_part(b"DELETE");
                 message.append_part(command.key.0.as_slice());
             }
             Command::SCAN(command) => {
-                message.extend_from_slice((MessageHead {
-                    count: 3
-                }).into_bytes().as_slice());
+                message.extend_from_slice((MessageHead { count: 3 }).into_bytes().as_slice());
 
                 message.append_part(b"SCAN");
                 message.append_part(command.start.0.as_slice());
@@ -171,8 +161,8 @@ impl Into<Vec<u8>> for Command {
 }
 
 impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
-    pub fn into_command_stream(self) -> impl Stream<Item = Result<Command>>  {
-        futures::stream::unfold(self,   |mut buffer| {
+    pub fn into_command_stream(self) -> impl Stream<Item = Result<Command>> {
+        futures::stream::unfold(self, |mut buffer| {
             let future = async move {
                 let command = read_command(&mut buffer).await;
                 Some((command, buffer))

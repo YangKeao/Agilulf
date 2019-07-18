@@ -47,9 +47,10 @@ impl<T: AsyncRead + Unpin> AsyncReadBuffer<T> {
                 let available = self.fill_buf().await?;
 
                 let index = memchr::memchr(b'\n', available);
-                if index.is_some() &&
-                    ((index.unwrap() > 0 && available[index.unwrap() - 1] == b'\r')
-                        || (index.unwrap() == 0 && !buf.is_empty() && buf[buf.len() - 1] == b'\r')) {
+                if index.is_some()
+                    && ((index.unwrap() > 0 && available[index.unwrap() - 1] == b'\r')
+                        || (index.unwrap() == 0 && !buf.is_empty() && buf[buf.len() - 1] == b'\r'))
+                {
                     let index = index.unwrap();
                     buf.extend_from_slice(&available[..=index]);
 
@@ -98,9 +99,7 @@ pub struct AsyncWriteBuffer<T: AsyncWrite + Unpin> {
 
 impl<T: AsyncWrite + Unpin> AsyncWriteBuffer<T> {
     pub fn new(stream: T) -> AsyncWriteBuffer<T> {
-        AsyncWriteBuffer {
-            stream,
-        }
+        AsyncWriteBuffer { stream }
     }
 
     pub async fn write_all(&mut self, data: Vec<u8>) -> Result<()> {
@@ -110,13 +109,13 @@ impl<T: AsyncWrite + Unpin> AsyncWriteBuffer<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Once;
-    use futures::executor::{self, ThreadPool};
-    use romio::{TcpStream, TcpListener};
-    use futures::task::SpawnExt;
-    use std::net::SocketAddr;
-    use futures::{StreamExt, AsyncWriteExt};
     use crate::AsyncReadBuffer;
+    use futures::executor::{self, ThreadPool};
+    use futures::task::SpawnExt;
+    use futures::{AsyncWriteExt, StreamExt};
+    use romio::{TcpListener, TcpStream};
+    use std::net::SocketAddr;
+    use std::sync::Once;
 
     const ADDRESS: &str = "127.0.0.1:7999";
     static START_SERVER: Once = Once::new();
@@ -135,10 +134,15 @@ mod tests {
                     while let Some(stream) = incoming.next().await {
                         let mut stream: TcpStream = stream.unwrap();
 
-                        thread_pool.spawn(async move {
-                            stream.write_all(b"TEST LINE 1\r\nTESTTESTTEST\r\n").await.unwrap();
-                            std::mem::forget(stream);
-                        }).unwrap();
+                        thread_pool
+                            .spawn(async move {
+                                stream
+                                    .write_all(b"TEST LINE 1\r\nTESTTESTTEST\r\n")
+                                    .await
+                                    .unwrap();
+                                std::mem::forget(stream);
+                            })
+                            .unwrap();
                     }
                 });
             });
@@ -146,8 +150,8 @@ mod tests {
         let addr = ADDRESS.parse::<SocketAddr>().unwrap();
         loop {
             match TcpStream::connect(&addr).await {
-                Err(_) => {},
-                Ok(stream) => return stream
+                Err(_) => {}
+                Ok(stream) => return stream,
             }
         }
     }

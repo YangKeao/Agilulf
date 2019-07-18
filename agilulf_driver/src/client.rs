@@ -1,15 +1,18 @@
 use std::net::SocketAddr;
 
-use agilulf_protocol::{Command, DeleteCommand, GetCommand, PutCommand, Reply, ScanCommand, Slice, AsyncReadBuffer, AsyncWriteBuffer, ProtocolError};
+use agilulf_protocol::{
+    AsyncReadBuffer, AsyncWriteBuffer, Command, DeleteCommand, GetCommand, ProtocolError,
+    PutCommand, Reply, ScanCommand, Slice,
+};
 use romio::TcpStream;
 
-use super::error::{Result};
-use futures::io::{AsyncReadExt, WriteHalf};
+use super::error::Result;
 use futures::channel::mpsc::{self, UnboundedReceiver};
-use futures::{SinkExt, StreamExt};
+use futures::io::{AsyncReadExt, WriteHalf};
 use futures::lock::Mutex;
-use std::sync::Arc;
+use futures::{SinkExt, StreamExt};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AgilulfClient {
@@ -93,7 +96,7 @@ impl AgilulfClient {
 
 #[derive(Clone)]
 pub struct MultiAgilulfClient {
-    knights: Arc<Vec<AgilulfClient>>
+    knights: Arc<Vec<AgilulfClient>>,
 }
 
 impl MultiAgilulfClient {
@@ -104,9 +107,7 @@ impl MultiAgilulfClient {
         }
         let knights = Arc::new(knights);
 
-        Ok(MultiAgilulfClient {
-            knights
-        })
+        Ok(MultiAgilulfClient { knights })
     }
     fn hash_key(key: &Slice) -> usize {
         let mut hasher = fnv::FnvHasher::default();
@@ -115,15 +116,9 @@ impl MultiAgilulfClient {
     }
     pub fn allocate_task(&self, command: &Command) -> usize {
         match command {
-            Command::PUT(command) => {
-                Self::hash_key(&command.key) % self.knights.len()
-            }
-            Command::DELETE(command) => {
-                Self::hash_key(&command.key) % self.knights.len()
-            }
-            Command::GET(command) => {
-                Self::hash_key(&command.key) % self.knights.len()
-            }
+            Command::PUT(command) => Self::hash_key(&command.key) % self.knights.len(),
+            Command::DELETE(command) => Self::hash_key(&command.key) % self.knights.len(),
+            Command::GET(command) => Self::hash_key(&command.key) % self.knights.len(),
             Command::SCAN(command) => {
                 Self::hash_key(&command.start) % self.knights.len() // TODO: Add Barrier here
             }
@@ -152,20 +147,26 @@ impl MultiAgilulfClient {
     }
 
     pub async fn send_batch(&self, commands: Vec<Command>) -> Result<Vec<Reply>> {
-        let commands: Vec<(usize, &Command)> = commands.iter().map(|command| (self.allocate_task(command), command)).collect();
+        let commands: Vec<(usize, &Command)> = commands
+            .iter()
+            .map(|command| (self.allocate_task(command), command))
+            .collect();
 
         let mut futures = Vec::new();
         for knight_id in 0..self.knights.len() {
             futures.push(
                 self.knights[knight_id].send_batch(
-                    commands.iter().filter_map(|(command_id ,command)| {
-                        if knight_id == *command_id {
-                            Some((*command).clone())
-                        } else {
-                            None
-                        }
-                    }).collect()
-                )
+                    commands
+                        .iter()
+                        .filter_map(|(command_id, command)| {
+                            if knight_id == *command_id {
+                                Some((*command).clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect(),
+                ),
             )
         }
 
@@ -178,7 +179,7 @@ impl MultiAgilulfClient {
         for (id, _) in commands.iter() {
             match future_replies[*id].next() {
                 Some(reply) => replies.push(reply),
-                None => unreachable!()
+                None => unreachable!(),
             }
         }
         Ok(replies)
@@ -188,15 +189,15 @@ impl MultiAgilulfClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agilulf_protocol::Status;
     use agilulf::{MemDatabase, Server};
-    use std::sync::{Once};
-    use std::sync::atomic::{AtomicI16, Ordering};
+    use agilulf_protocol::Status;
     use futures::executor::ThreadPool;
-    use futures::task::{SpawnExt};
+    use futures::task::SpawnExt;
     use futures::Future;
-    use rand::{Rng, thread_rng};
     use rand::distributions::Standard;
+    use rand::{thread_rng, Rng};
+    use std::sync::atomic::{AtomicI16, Ordering};
+    use std::sync::Once;
 
     static INIT: Once = Once::new();
     static SERVER_PORT: AtomicI16 = AtomicI16::new(7000);
@@ -219,7 +220,8 @@ mod tests {
             .name(String::from("server_thread"))
             .spawn(|| {
                 server.run().unwrap();
-            }).unwrap();
+            })
+            .unwrap();
 
         return server_port;
     }
@@ -228,7 +230,7 @@ mod tests {
         let address = format!("127.0.0.1:{}", server_port);
         loop {
             match AgilulfClient::connect(address.as_str()).await {
-                Err(_) => {},
+                Err(_) => {}
                 Ok(client) => return client,
             }
         }
@@ -238,17 +240,21 @@ mod tests {
         let address = format!("127.0.0.1:{}", server_port);
         loop {
             match MultiAgilulfClient::connect(address.as_str(), knights_num).await {
-                Err(_) => {},
+                Err(_) => {}
                 Ok(client) => return client,
             }
         }
     }
 
-    fn run_test<F, Fut >(f: F)
-        where F: FnOnce(i16, ThreadPool) -> Fut + Send + Sync,
-              Fut: Future<Output=()> + Send {
+    fn run_test<F, Fut>(f: F)
+    where
+        F: FnOnce(i16, ThreadPool) -> Fut + Send + Sync,
+        Fut: Future<Output = ()> + Send,
+    {
         let mut thread_pool = ThreadPool::builder()
-            .name_prefix("test_thread").create().unwrap();
+            .name_prefix("test_thread")
+            .create()
+            .unwrap();
 
         let port = setup_server();
 
@@ -264,13 +270,25 @@ mod tests {
         run_test(async move |port, _| {
             let client = connect(port).await;
             for i in 0..100 {
-                let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
+                let ans = client
+                    .put(
+                        Slice(format!("key{}", i).into_bytes()),
+                        Slice(format!("value{}", i).into_bytes()),
+                    )
+                    .await
+                    .unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
             }
 
             for i in 0..100 {
-                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
-                assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                let ans = client
+                    .get(Slice(format!("key{}", i).into_bytes()))
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    ans,
+                    Reply::SliceReply(Slice(format!("value{}", i).into_bytes()))
+                );
             }
         });
     }
@@ -282,18 +300,26 @@ mod tests {
 
             let mut requests = Vec::new();
             for i in 0..100 {
-                requests.push(Command::PUT(PutCommand{key: Slice(format!("key{}", i).into_bytes()), value: Slice(format!("value{}", i).into_bytes())}));
+                requests.push(Command::PUT(PutCommand {
+                    key: Slice(format!("key{}", i).into_bytes()),
+                    value: Slice(format!("value{}", i).into_bytes()),
+                }));
             }
             client.send_batch(requests).await.unwrap();
 
             let mut requests = Vec::new();
             for i in 0..100 {
-                requests.push(Command::GET(GetCommand{key: Slice(format!("key{}", i).into_bytes())}));
+                requests.push(Command::GET(GetCommand {
+                    key: Slice(format!("key{}", i).into_bytes()),
+                }));
             }
             let replies = client.send_batch(requests).await.unwrap();
 
             for i in 0..100 {
-                assert_eq!(replies[i], Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                assert_eq!(
+                    replies[i],
+                    Reply::SliceReply(Slice(format!("value{}", i).into_bytes()))
+                );
             }
         });
     }
@@ -303,28 +329,49 @@ mod tests {
         run_test(async move |port, _| {
             let client = connect(port).await;
             for i in 0..100 {
-                let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
+                let ans = client
+                    .put(
+                        Slice(format!("key{}", i).into_bytes()),
+                        Slice(format!("value{}", i).into_bytes()),
+                    )
+                    .await
+                    .unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
             }
 
             for i in 0..100 {
-                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
-                assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                let ans = client
+                    .get(Slice(format!("key{}", i).into_bytes()))
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    ans,
+                    Reply::SliceReply(Slice(format!("value{}", i).into_bytes()))
+                );
             }
 
             for i in 0..100 {
-                if i%2 == 0 {
-                    let ans = client.delete(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                if i % 2 == 0 {
+                    let ans = client
+                        .delete(Slice(format!("key{}", i).into_bytes()))
+                        .await
+                        .unwrap();
                     assert_eq!(ans, Reply::StatusReply(Status::OK));
                 }
             }
 
             for i in 0..100 {
-                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                let ans = client
+                    .get(Slice(format!("key{}", i).into_bytes()))
+                    .await
+                    .unwrap();
                 if i % 2 == 0 {
                     assert_eq!(ans, Reply::ErrorReply(String::from("KeyNotFound\r\n")));
                 } else {
-                    assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                    assert_eq!(
+                        ans,
+                        Reply::SliceReply(Slice(format!("value{}", i).into_bytes()))
+                    );
                 }
             }
         });
@@ -335,43 +382,70 @@ mod tests {
         run_test(async move |port, _| {
             let client = connect(port).await;
             for i in 0..100 {
-                let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("value{}", i).into_bytes())).await.unwrap();
+                let ans = client
+                    .put(
+                        Slice(format!("key{}", i).into_bytes()),
+                        Slice(format!("value{}", i).into_bytes()),
+                    )
+                    .await
+                    .unwrap();
                 assert_eq!(ans, Reply::StatusReply(Status::OK));
             }
 
             for i in 0..100 {
-                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
-                assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                let ans = client
+                    .get(Slice(format!("key{}", i).into_bytes()))
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    ans,
+                    Reply::SliceReply(Slice(format!("value{}", i).into_bytes()))
+                );
             }
 
             for i in 0..100 {
-                if i%2 == 0 {
-                    let ans = client.put(Slice(format!("key{}", i).into_bytes()), Slice(format!("new_value{}", i).into_bytes())).await.unwrap();
+                if i % 2 == 0 {
+                    let ans = client
+                        .put(
+                            Slice(format!("key{}", i).into_bytes()),
+                            Slice(format!("new_value{}", i).into_bytes()),
+                        )
+                        .await
+                        .unwrap();
                     assert_eq!(ans, Reply::StatusReply(Status::OK));
                 }
             }
 
             for i in 0..100 {
-                let ans = client.get(Slice(format!("key{}", i).into_bytes())).await.unwrap();
+                let ans = client
+                    .get(Slice(format!("key{}", i).into_bytes()))
+                    .await
+                    .unwrap();
                 if i % 2 == 0 {
-                    assert_eq!(ans, Reply::SliceReply(Slice(format!("new_value{}", i).into_bytes())));
+                    assert_eq!(
+                        ans,
+                        Reply::SliceReply(Slice(format!("new_value{}", i).into_bytes()))
+                    );
                 } else {
-                    assert_eq!(ans, Reply::SliceReply(Slice(format!("value{}", i).into_bytes())));
+                    assert_eq!(
+                        ans,
+                        Reply::SliceReply(Slice(format!("value{}", i).into_bytes()))
+                    );
                 }
             }
         });
     }
 
     fn generate_keys(num: usize) -> Vec<Vec<u8>> {
-        (0..num).map(|_| {
-            thread_rng().sample_iter(&Standard).take(8).collect()
-        }).collect()
+        (0..num)
+            .map(|_| thread_rng().sample_iter(&Standard).take(8).collect())
+            .collect()
     }
 
     fn generate_values(num: usize) -> Vec<Vec<u8>> {
-        (0..num).map(|_| {
-            thread_rng().sample_iter(&Standard).take(256).collect()
-        }).collect()
+        (0..num)
+            .map(|_| thread_rng().sample_iter(&Standard).take(256).collect())
+            .collect()
     }
 
     fn generate_request(num: usize) -> Vec<Command> {
@@ -379,12 +453,14 @@ mod tests {
 
         let value: Vec<Vec<u8>> = generate_values(num);
 
-        (0..num).map(|index| {
-            Command::PUT(PutCommand {
-                key: Slice(keys[index].clone()),
-                value: Slice(value[index].clone()),
+        (0..num)
+            .map(|index| {
+                Command::PUT(PutCommand {
+                    key: Slice(keys[index].clone()),
+                    value: Slice(value[index].clone()),
+                })
             })
-        }).collect()
+            .collect()
     }
 
     #[test]
@@ -419,18 +495,20 @@ mod tests {
         run_test(async move |port, mut thread_pool| {
             let client = connect(port).await;
             let (sender, receiver) = crossbeam_channel::unbounded::<()>();
-            thread_pool.spawn(async move {
-                let mut requests = requests.iter().cycle();
-                loop {
-                    for _ in 0..1000 {
-                        client.send(requests.next().unwrap().clone()).await.unwrap();
+            thread_pool
+                .spawn(async move {
+                    let mut requests = requests.iter().cycle();
+                    loop {
+                        for _ in 0..1000 {
+                            client.send(requests.next().unwrap().clone()).await.unwrap();
+                        }
+                        match sender.send(()) {
+                            Err(_) => {}
+                            Ok(_) => {}
+                        };
                     }
-                    match sender.send(()) {
-                        Err(_)  => {}
-                        Ok(_) => {}
-                    };
-                }
-            }).unwrap();
+                })
+                .unwrap();
 
             b.iter(|| {
                 receiver.recv().unwrap();
@@ -449,15 +527,17 @@ mod tests {
             let client = client.clone();
             let requests = requests.clone();
             let sender = sender.clone();
-            thread_pool.spawn(async move {
-                loop {
-                    client.send_batch(requests.to_vec()).await.unwrap();
-                    match sender.send(()) {
-                        Err(_)  => {}
-                        Ok(_) => {}
-                    };
-                }
-            }).unwrap();
+            thread_pool
+                .spawn(async move {
+                    loop {
+                        client.send_batch(requests.to_vec()).await.unwrap();
+                        match sender.send(()) {
+                            Err(_) => {}
+                            Ok(_) => {}
+                        };
+                    }
+                })
+                .unwrap();
 
             b.iter(|| {
                 receiver.recv().unwrap();
@@ -472,18 +552,20 @@ mod tests {
         run_test(async move |port, mut thread_pool| {
             let client = multi_connect(port, 4).await;
             let (sender, receiver) = crossbeam_channel::unbounded::<()>();
-            thread_pool.spawn(async move {
-                let mut requests = requests.iter().cycle();
-                loop {
-                    for _ in 0..1000 {
-                        client.send(requests.next().unwrap().clone()).await.unwrap();
+            thread_pool
+                .spawn(async move {
+                    let mut requests = requests.iter().cycle();
+                    loop {
+                        for _ in 0..1000 {
+                            client.send(requests.next().unwrap().clone()).await.unwrap();
+                        }
+                        match sender.send(()) {
+                            Err(_) => {}
+                            Ok(_) => {}
+                        };
                     }
-                    match sender.send(()) {
-                        Err(_)  => {}
-                        Ok(_) => {}
-                    };
-                }
-            }).unwrap();
+                })
+                .unwrap();
 
             b.iter(|| {
                 receiver.recv().unwrap();
@@ -502,15 +584,17 @@ mod tests {
             let client = client.clone();
             let requests = requests.clone();
             let sender = sender.clone();
-            thread_pool.spawn(async move {
-                loop {
-                    client.send_batch(requests.to_vec()).await.unwrap();
-                    match sender.send(()) {
-                        Err(_)  => {}
-                        Ok(_) => {}
-                    };
-                }
-            }).unwrap();
+            thread_pool
+                .spawn(async move {
+                    loop {
+                        client.send_batch(requests.to_vec()).await.unwrap();
+                        match sender.send(()) {
+                            Err(_) => {}
+                            Ok(_) => {}
+                        };
+                    }
+                })
+                .unwrap();
 
             b.iter(|| {
                 receiver.recv().unwrap();

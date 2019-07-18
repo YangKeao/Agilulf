@@ -1,20 +1,20 @@
 use std::net::SocketAddr;
 
 use futures::executor::{self, ThreadPool};
-use futures::{StreamExt, SinkExt};
-use futures::task::{SpawnExt};
 use futures::io::AsyncReadExt;
+use futures::task::SpawnExt;
+use futures::{SinkExt, StreamExt};
 
 use romio::{TcpListener, TcpStream};
 
-use log::{info};
+use log::info;
 
-use super::error::{Result};
+use super::error::Result;
+use agilulf_protocol::Result as ProtocolResult;
 use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer};
-use agilulf_protocol::{Result as ProtocolResult};
 
-use agilulf_protocol::Command;
 use crate::storage::AsyncDatabase;
+use agilulf_protocol::Command;
 use std::sync::Arc;
 
 pub struct Server {
@@ -27,7 +27,10 @@ impl Server {
         let addr = address.parse::<SocketAddr>()?;
         let listener = TcpListener::bind(&addr)?;
 
-        Ok(Server { listener, database: Arc::new(database) })
+        Ok(Server {
+            listener,
+            database: Arc::new(database),
+        })
     }
 
     pub async fn run_async(mut self) {
@@ -38,16 +41,16 @@ impl Server {
             let stream: TcpStream = stream.unwrap();
 
             let database = self.database.clone();
-            thread_pool.spawn(async move {
-                handle_stream(stream, database).await.unwrap(); // TODO: handle error here
-            }).unwrap(); // TODO: handler error here
+            thread_pool
+                .spawn(async move {
+                    handle_stream(stream, database).await.unwrap(); // TODO: handle error here
+                })
+                .unwrap(); // TODO: handler error here
         }
     }
 
-    pub fn run(self) -> Result<()>{
-        executor::block_on(async {
-            self.run_async().await
-        });
+    pub fn run(self) -> Result<()> {
+        executor::block_on(async { self.run_async().await });
 
         Ok(())
     }
@@ -64,17 +67,21 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn AsyncDatabase>) -> R
     let mut process_sink = reply_sink.with(|command: ProtocolResult<Command>| {
         Box::pin(async {
             match command {
-                Ok(command) => {
-                    match command {
-                        Command::GET(command) => ProtocolResult::Ok(database.get(command.key).await.into()),
-                        Command::PUT(command) => ProtocolResult::Ok(database.put(command.key, command.value).await.into()),
-                        Command::SCAN(command) => ProtocolResult::Ok(database.scan(command.start, command.end).await.into()),
-                        Command::DELETE(command) => ProtocolResult::Ok(database.delete(command.key).await.into()),
+                Ok(command) => match command {
+                    Command::GET(command) => {
+                        ProtocolResult::Ok(database.get(command.key).await.into())
                     }
-                }
-                Err(err) => {
-                    ProtocolResult::Err(err)
-                }
+                    Command::PUT(command) => {
+                        ProtocolResult::Ok(database.put(command.key, command.value).await.into())
+                    }
+                    Command::SCAN(command) => {
+                        ProtocolResult::Ok(database.scan(command.start, command.end).await.into())
+                    }
+                    Command::DELETE(command) => {
+                        ProtocolResult::Ok(database.delete(command.key).await.into())
+                    }
+                },
+                Err(err) => ProtocolResult::Err(err),
             }
         })
     });

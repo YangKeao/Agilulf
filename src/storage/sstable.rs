@@ -1,10 +1,10 @@
 use super::{mem_database::MemDatabase, SyncDatabase};
-use agilulf_protocol::error::database_error::{Result, DatabaseError};
+use agilulf_protocol::error::database_error::{DatabaseError, Result};
 use agilulf_protocol::Slice;
 use memmap::MmapOptions;
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::ops::{Index, Range};
-use std::borrow::Borrow;
 
 pub trait SearchIndex:
     Index<usize, Output = (Slice, Slice)>
@@ -81,7 +81,10 @@ impl SearchIndex for Vec<(Slice, Slice)> {
 
 impl<T: Borrow<MemDatabase>> From<T> for SSTable {
     fn from(mem_database: T) -> Self {
-        let kv_pairs: Box<Vec<(Slice, Slice)>> = box mem_database.borrow().scan_sync(Slice(Vec::new()), Slice(vec![255; 8])).into_iter()
+        let kv_pairs: Box<Vec<(Slice, Slice)>> = box mem_database
+            .borrow()
+            .scan_sync(Slice(Vec::new()), Slice(vec![255; 8]))
+            .into_iter()
             .collect();
 
         Self { kv_pairs }
@@ -92,32 +95,32 @@ pub const PART_LENGTH: usize = 256 + 8;
 
 struct SliceMmap {
     inner_mmap: memmap::Mmap,
-    inner_vec: Vec<(Slice, Slice)>
+    inner_vec: Vec<(Slice, Slice)>,
 }
 
 impl SliceMmap {
     fn from_mmap(mmap: memmap::Mmap) -> Self {
         unsafe {
             let length = mmap.len() / PART_LENGTH;
-            let mut inner_vec= Vec::new();
+            let mut inner_vec = Vec::new();
 
             for index in 0..length {
                 let key = Vec::from_raw_parts(
                     mmap.index(PART_LENGTH * index) as *const u8 as *mut u8, // Note: don't write to this vector
                     8,
-                    8
+                    8,
                 );
                 let value = Vec::from_raw_parts(
                     mmap.index(PART_LENGTH * index + 8) as *const u8 as *mut u8, // Note: don't write to this vector
                     256,
-                    256
+                    256,
                 );
                 inner_vec.push((Slice(key), Slice(value)));
             }
 
             SliceMmap {
                 inner_mmap: mmap,
-                inner_vec
+                inner_vec,
             }
         }
     }
@@ -184,11 +187,9 @@ impl SSTable {
     }
 
     fn open(file: std::fs::File) -> SSTableResult<Self> {
-        let mmap = box SliceMmap::from_mmap(unsafe {  MmapOptions::new().map(&file)? });
+        let mmap = box SliceMmap::from_mmap(unsafe { MmapOptions::new().map(&file)? });
 
-        Ok(Self {
-            kv_pairs: mmap
-        })
+        Ok(Self { kv_pairs: mmap })
     }
 }
 

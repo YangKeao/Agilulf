@@ -1,22 +1,22 @@
 use super::database_log::DatabaseLog;
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
-use crate::{MemDatabase, AsyncDatabase};
+use crate::storage::SyncDatabase;
+use crate::{AsyncDatabase, MemDatabase};
+use agilulf_protocol::Slice;
+use crossbeam::channel::{unbounded, Sender};
 use crossbeam::sync::ShardedLock;
-use futures::task::{Spawn, SpawnExt, LocalSpawn, LocalSpawnExt};
+use futures::executor::LocalPool;
+use futures::stream::StreamExt;
+use futures::task::{LocalSpawn, LocalSpawnExt, Spawn, SpawnExt};
+use futures::Future;
 use memmap::{MmapMut, MmapOptions};
 use std::collections::{BTreeMap, VecDeque};
-use std::sync::atomic::AtomicUsize;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::Ordering;
 use std::path::Path;
-use crossbeam::channel::{unbounded, Sender};
-use futures::stream::StreamExt;
-use futures::executor::LocalPool;
-use agilulf_protocol::Slice;
 use std::pin::Pin;
-use futures::Future;
-use crate::storage::SyncDatabase;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 
 #[repr(packed)]
 #[derive(Clone)]
@@ -46,7 +46,7 @@ pub struct ManifestManager {
     log_manager: LogManager<RawManifestLogEntry>,
     frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
     sstables: Arc<[ShardedLock<BTreeMap<usize, SSTable>>; 6]>, // TODO: a concurrent RwLock may be better
-    level_counter: Arc<[AtomicUsize; 6]>
+    level_counter: Arc<[AtomicUsize; 6]>,
 }
 
 impl ManifestManager {
@@ -63,18 +63,22 @@ impl ManifestManager {
             base_dir: base_dir.to_string(),
             log_manager: LogManager::create_new(manifest_path, 4 * 1024).unwrap(), // TODO: handle error here
             frozen_databases,
-            sstables: Arc::new([ShardedLock::new(BTreeMap::new()),
+            sstables: Arc::new([
                 ShardedLock::new(BTreeMap::new()),
                 ShardedLock::new(BTreeMap::new()),
                 ShardedLock::new(BTreeMap::new()),
                 ShardedLock::new(BTreeMap::new()),
-                ShardedLock::new(BTreeMap::new())]),
-            level_counter: Arc::new([AtomicUsize::new(0),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+            ]),
+            level_counter: Arc::new([
                 AtomicUsize::new(0),
                 AtomicUsize::new(0),
                 AtomicUsize::new(0),
                 AtomicUsize::new(0),
-                AtomicUsize::new(0)]) // TODO: use macro to avoid these redundant codes
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+            ]), // TODO: use macro to avoid these redundant codes
         }
     }
 
@@ -91,18 +95,22 @@ impl ManifestManager {
             base_dir: base_dir.to_string(),
             log_manager: LogManager::open(manifest_path, 4 * 1024).unwrap(), // TODO: handle error here
             frozen_databases,
-            sstables: Arc::new([ShardedLock::new(BTreeMap::new()),
+            sstables: Arc::new([
                 ShardedLock::new(BTreeMap::new()),
                 ShardedLock::new(BTreeMap::new()),
                 ShardedLock::new(BTreeMap::new()),
                 ShardedLock::new(BTreeMap::new()),
-                ShardedLock::new(BTreeMap::new())]),
-            level_counter: Arc::new([AtomicUsize::new(0),
+                ShardedLock::new(BTreeMap::new()),
+                ShardedLock::new(BTreeMap::new()),
+            ]),
+            level_counter: Arc::new([
                 AtomicUsize::new(0),
                 AtomicUsize::new(0),
                 AtomicUsize::new(0),
                 AtomicUsize::new(0),
-                AtomicUsize::new(0)]) // TODO: restore sstables and level_counter from log
+                AtomicUsize::new(0),
+                AtomicUsize::new(0),
+            ]), // TODO: restore sstables and level_counter from log
         }
     }
 
@@ -133,21 +141,20 @@ impl ManifestManager {
 
                                 let id = level_counter[0].fetch_add(1, Ordering::SeqCst);
 
-                                let table_path = base_path.join(format!{"0_{}", id});
+                                let table_path = base_path.join(format! {"0_{}", id});
                                 sstable.save(table_path.to_str().unwrap()).await; // TODO: handle error here
 
                                 sstables[0].write().unwrap().insert(id, sstable);
                                 frozen_databases.write().unwrap().pop_back();
                             }
-                            None => {
-
-                            }
+                            None => {}
                         }
                     }
                 });
 
                 local_pool.run()
-            }).unwrap();
+            })
+            .unwrap();
 
         sender
     }

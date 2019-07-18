@@ -1,12 +1,12 @@
 #![feature(async_await)]
 
-use agilulf::{Server, MemDatabase, DatabaseBuilder};
-use agilulf_protocol::{Command, PutCommand, Slice, GetCommand, Reply};
+use agilulf::{DatabaseBuilder, MemDatabase, Server};
+use agilulf_driver::MultiAgilulfClient;
+use agilulf_protocol::{Command, GetCommand, PutCommand, Reply, Slice};
 use futures::executor::ThreadPool;
 use rand::distributions::Standard;
 use rand::{thread_rng, Rng};
-use agilulf_driver::MultiAgilulfClient;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 fn generate_keys(num: usize) -> Vec<Vec<u8>> {
     (0..num)
@@ -25,21 +25,22 @@ fn generate_request(num: usize) -> (Vec<Command>, Vec<Command>) {
 
     let value: Vec<Vec<u8>> = generate_values(num);
 
-    ((0..num)
-        .map(|index| {
-            Command::PUT(PutCommand {
-                key: Slice(keys[index].clone()),
-                value: Slice(value[index].clone()),
+    (
+        (0..num)
+            .map(|index| {
+                Command::PUT(PutCommand {
+                    key: Slice(keys[index].clone()),
+                    value: Slice(value[index].clone()),
+                })
             })
-        })
-        .collect(),
-     (0..num)
-         .map(|index| {
-             Command::GET(GetCommand {
-                 key: Slice(keys[index].clone()),
-             })
-         })
-         .collect()
+            .collect(),
+        (0..num)
+            .map(|index| {
+                Command::GET(GetCommand {
+                    key: Slice(keys[index].clone()),
+                })
+            })
+            .collect(),
     )
 }
 
@@ -47,7 +48,7 @@ async fn connect(server_port: i16) -> MultiAgilulfClient {
     let address = format!("127.0.0.1:{}", server_port);
     loop {
         match MultiAgilulfClient::connect(address.as_str(), 128).await {
-            Err(_) => {},
+            Err(_) => {}
             Ok(client) => return client,
         }
     }
@@ -57,7 +58,8 @@ fn main() {
     let database = DatabaseBuilder::default()
         .restore(false)
         .base_dir("/var/tmp/agilulf".to_string())
-        .build().unwrap();
+        .build()
+        .unwrap();
 
     let server = Server::new("127.0.0.1:7890", database).unwrap();
     std::thread::Builder::new()
@@ -105,17 +107,13 @@ fn main() {
             times += 1;
             if end.duration_since(now) > Duration::new(10, 0) {
                 time /= times;
-                for (index, res ) in get_response.iter().enumerate() {
+                for (index, res) in get_response.iter().enumerate() {
                     match res {
-                        Reply::SliceReply(value) => {
-                            match &put_request[index] {
-                                Command::PUT(put) => {
-                                    assert_eq!(value, &put.value)
-                                }
-                                _ => unreachable!()
-                            }
-                        }
-                        _ => unreachable!()
+                        Reply::SliceReply(value) => match &put_request[index] {
+                            Command::PUT(put) => assert_eq!(value, &put.value),
+                            _ => unreachable!(),
+                        },
+                        _ => unreachable!(),
                     }
                 }
                 break;
@@ -144,7 +142,13 @@ fn main() {
         let mut times = 0;
         loop {
             let start = Instant::now();
-            client.put(Slice(generate_keys(1)[0].clone()), Slice(generate_values(1)[0].clone())).await.unwrap();
+            client
+                .put(
+                    Slice(generate_keys(1)[0].clone()),
+                    Slice(generate_values(1)[0].clone()),
+                )
+                .await
+                .unwrap();
             let end = Instant::now();
             time += end.duration_since(start);
             times += 1;
@@ -154,7 +158,5 @@ fn main() {
             }
         }
         println!("Send one PUT cost: {:?}", time);
-
-
     });
 }

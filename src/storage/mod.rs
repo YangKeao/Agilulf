@@ -1,18 +1,18 @@
-pub mod mem_database;
 mod database;
-mod manifest_manager;
 mod database_log;
-mod sstable;
+mod manifest_manager;
+pub mod mem_database;
 mod merge;
+mod sstable;
 
 use agilulf_protocol::Slice;
 
+use crate::storage::database_log::DatabaseLog;
 use agilulf_protocol::error::database_error::Result;
 use futures::Future;
 use std::pin::Pin;
-use crate::storage::database_log::DatabaseLog;
 
-pub use database::{DatabaseBuilder, Database};
+pub use database::{Database, DatabaseBuilder};
 
 pub trait SyncDatabase: Send + Sync {
     fn get_sync(&self, key: Slice) -> Result<Slice>;
@@ -44,9 +44,7 @@ pub trait AsyncDatabase: Send + Sync {
 
 impl<T: SyncDatabase> AsyncDatabase for T {
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<Slice>> + Send + '_>> {
-        Box::pin(async move {
-            self.get_sync(key)
-        })
+        Box::pin(async move { self.get_sync(key) })
     }
 
     fn put(
@@ -54,9 +52,7 @@ impl<T: SyncDatabase> AsyncDatabase for T {
         key: Slice,
         value: Slice,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
-        Box::pin(async move {
-            self.put_sync(key, value)
-        })
+        Box::pin(async move { self.put_sync(key, value) })
     }
 
     fn scan(
@@ -64,14 +60,10 @@ impl<T: SyncDatabase> AsyncDatabase for T {
         start: Slice,
         end: Slice,
     ) -> Pin<Box<dyn Future<Output = Vec<(Slice, Slice)>> + Send + '_>> {
-        Box::pin(async move {
-            self.scan_sync(start, end)
-        })
+        Box::pin(async move { self.scan_sync(start, end) })
     }
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
-        Box::pin(async move {
-            self.delete_sync(key)
-        })
+        Box::pin(async move { self.delete_sync(key) })
     }
 }
