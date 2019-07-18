@@ -334,20 +334,16 @@ mod tests {
                 let key = Slice(keys[index].clone());
                 let value = Slice(values[index].clone());
 
-                println!("PUT {}", index);
                 database.put(key, value).await.unwrap();
             }
 
-            println!("PUT FINISH");
             for index in 0..(1024 * 16) {
                 let key = Slice(keys[index].clone());
                 let value = Slice(values[index].clone());
 
-                println!("GET {}", index);
                 let ans = database.get(key).await.unwrap();
                 assert_eq!(ans, value);
             }
-            println!("GET FINISH");
         });
 
         let database = DatabaseBuilder::default().restore(true).build().unwrap();
