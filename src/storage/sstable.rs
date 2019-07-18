@@ -14,7 +14,6 @@ pub trait SearchIndex:
 {
     fn len(&self) -> usize;
 
-    // TODO: this implementation of binary_search may fall in left or right. Make it stable in the future.
     fn binary_search_by_key(&self, key: &Slice) -> usize {
         let mut size = self.len();
         if size == 0 {
