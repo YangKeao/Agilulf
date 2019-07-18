@@ -1,4 +1,4 @@
-use super::log_manager::LogManager;
+use super::database_log::DatabaseLog;
 use super::manifest_manager::ManifestManager;
 use super::mem_database::MemDatabase;
 use super::{AsyncDatabase, SyncDatabase};
@@ -7,7 +7,6 @@ use agilulf_protocol::Slice;
 use futures::Future;
 use std::pin::Pin;
 use std::path::Path;
-use crate::storage::log_manager::LogError;
 
 pub struct DatabaseBuilder {
     base_dir: String,
@@ -32,11 +31,11 @@ quick_error! {
 pub type BuildResult<T> = std::result::Result<T, BuildError>;
 
 impl DatabaseBuilder {
-    fn restore(mut self, restore: bool) -> Self {
+    fn restore(&mut self, restore: bool) -> &mut Self {
         self.restore = restore;
         self
     }
-    fn base_dir(mut self, base_dir: String) -> Self {
+    fn base_dir(&mut self, base_dir: String) -> &mut Self {
         self.base_dir = base_dir;
         self
     }
@@ -46,18 +45,18 @@ impl DatabaseBuilder {
         let log_path = base_path.join("log");
         let log_path = log_path.to_str().unwrap(); // TODO: handle error here
 
-        let log_manager = match self.restore {
+        let database_log = match self.restore {
             true => {
-                match LogManager::open(log_path) {
-                    Ok(log_manager) => log_manager,
+                match DatabaseLog::open(log_path) {
+                    Ok(database_log) => database_log,
                     Err(err) => {
                         panic!() // TODO: handle error here
                     }
                 }
             }
             false => {
-                match LogManager::create_new(log_path) {
-                    Ok(log_manager) => log_manager,
+                match DatabaseLog::create_new(log_path) {
+                    Ok(database_log) => database_log,
                     Err(err) => {
                         panic!() // TODO: handle error here
                     }
@@ -66,21 +65,21 @@ impl DatabaseBuilder {
         };
 
         let mem_database = if self.restore {
-            MemDatabase::restore_from_iterator(log_manager.iter())
+            MemDatabase::restore_from_iterator(database_log.iter())
         } else {
             MemDatabase::default()
         };
 
         Ok(Database {
             mem_database,
-            log_manager
+            database_log
         })
     }
 }
 
 pub struct Database {
     mem_database: MemDatabase,
-    log_manager: LogManager,
+    database_log: DatabaseLog,
 //    manifest_manager: ManifestManager,
 }
 
@@ -93,7 +92,7 @@ impl AsyncDatabase for Database {
 
     fn put(&self, key: Slice, value: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
-            SyncDatabase::put(&self.log_manager, key.clone(), value.clone());
+            SyncDatabase::put(&self.database_log, key.clone(), value.clone());
             SyncDatabase::put(&self.mem_database, key, value)
         })
     }
@@ -126,7 +125,7 @@ mod tests {
             database.put(Slice(b"HELLO".to_vec()), Slice(b"WORLD".to_vec())).await.unwrap();
         });
 
-        let log_manager = LogManager::open("/var/tmp/agilulf/log").unwrap();
+        let log_manager = DatabaseLog::open("/var/tmp/agilulf/log").unwrap();
         for command in log_manager.iter() {
             match command {
                 Command::PUT(command) => {

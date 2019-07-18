@@ -9,6 +9,7 @@ extern crate test;
 #[macro_use]
 extern crate quick_error;
 
+mod log;
 mod server;
 mod storage;
 

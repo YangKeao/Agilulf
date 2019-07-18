@@ -31,6 +31,14 @@ pub trait SearchIndex:
 
         base
     }
+
+    fn first(&self) -> &(Slice, Slice) {
+        &self[self.len() - 1]
+    }
+
+    fn last(&self) -> &(Slice, Slice) {
+        &self[self.len() - 1]
+    }
 }
 
 #[repr(packed)]
@@ -77,7 +85,7 @@ impl From<MemDatabase> for SSTable {
     }
 }
 
-const PART_LENGTH: usize = 256 + 8;
+pub const PART_LENGTH: usize = 256 + 8;
 
 struct SliceMmap {
     inner_mmap: memmap::Mmap,
