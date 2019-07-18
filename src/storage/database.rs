@@ -45,13 +45,25 @@ impl DatabaseBuilder {
 
         let log_path = base_path.join("log");
         let log_path = log_path.to_str().unwrap(); // TODO: handle error here
-        println!("{:?}", log_path);
-        let log_manager = match LogManager::open(log_path) {
-            Ok(log_manager) => log_manager,
-            Err(err) => {
-                panic!() // TODO: handle error here
+
+        let log_manager = match self.restore {
+            true => {
+                match LogManager::open(log_path) {
+                    Ok(log_manager) => log_manager,
+                    Err(err) => {
+                        panic!() // TODO: handle error here
+                    }
+                }
             }
-        }; // TODO: check restore flag to create new file
+            false => {
+                match LogManager::create_new(log_path) {
+                    Ok(log_manager) => log_manager,
+                    Err(err) => {
+                        panic!() // TODO: handle error here
+                    }
+                }
+            }
+        };
 
         let mem_database = if self.restore {
             MemDatabase::restore_from_iterator(log_manager.iter())

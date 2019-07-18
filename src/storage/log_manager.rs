@@ -67,6 +67,14 @@ pub struct LogManager {
 }
 
 impl LogManager {
+    pub fn create_new(path: &str) -> Result<LogManager> {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)?;
+
+        LogManager::open(path)
+    }
     pub fn open(path: &str) -> Result<LogManager> {
         {
             let file = agilulf_fs::File::open(path)?;
