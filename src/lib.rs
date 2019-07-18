@@ -2,6 +2,7 @@
 #![feature(type_alias_enum_variants)]
 #![feature(test)]
 #![feature(box_syntax)]
+#![feature(atomic_min_max)]
 #![allow(clippy::needless_lifetimes)]
 
 extern crate test;

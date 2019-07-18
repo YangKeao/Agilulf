@@ -186,7 +186,7 @@ impl SSTable {
         Ok(())
     }
 
-    fn open(file: std::fs::File) -> SSTableResult<Self> {
+    pub fn open(file: std::fs::File) -> SSTableResult<Self> {
         let mmap = box SliceMmap::from_mmap(unsafe { MmapOptions::new().map(&file)? });
 
         Ok(Self { kv_pairs: mmap })

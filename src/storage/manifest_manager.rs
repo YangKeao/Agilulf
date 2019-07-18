@@ -17,14 +17,15 @@ use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
+use std::hint::unreachable_unchecked;
 
 #[repr(packed)]
 #[derive(Clone)]
 pub struct RawManifestLogEntry {
-    real_flag: u8,
-    add_flag: u8,
-    level: u8,
-    id: u8,
+    pub real_flag: u8,
+    pub add_flag: u8,
+    pub level: u8,
+    pub id: u8,
 }
 
 impl JudgeReal for RawManifestLogEntry {
@@ -43,7 +44,7 @@ impl JudgeReal for RawManifestLogEntry {
 
 pub struct ManifestManager {
     base_dir: String,
-    log_manager: LogManager<RawManifestLogEntry>,
+    log_manager: Arc<LogManager<RawManifestLogEntry>>,
     frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
     sstables: Arc<[ShardedLock<BTreeMap<usize, SSTable>>; 6]>, // TODO: a concurrent RwLock may be better
     level_counter: Arc<[AtomicUsize; 6]>,
@@ -61,7 +62,7 @@ impl ManifestManager {
 
         ManifestManager {
             base_dir: base_dir.to_string(),
-            log_manager: LogManager::create_new(manifest_path, 4 * 1024).unwrap(), // TODO: handle error here
+            log_manager: Arc::new(LogManager::create_new(manifest_path, 4 * 1024).unwrap()), // TODO: handle error here
             frozen_databases,
             sstables: Arc::new([
                 ShardedLock::new(BTreeMap::new()),
@@ -87,30 +88,53 @@ impl ManifestManager {
         frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
     ) -> ManifestManager {
         let base_path = Path::new(base_dir); // TODO: handle error here
-        let base_path = base_path.join("MANIFEST");
+        let manifest_path = base_path.join("MANIFEST");
 
-        let manifest_path = base_path.to_str().unwrap();
+        let manifest_path = manifest_path.to_str().unwrap();
+        let log_manager: Arc<LogManager<RawManifestLogEntry>> = Arc::new(LogManager::open(manifest_path, 4 * 1024).unwrap());
+
+        let sstables = Arc::new([
+            ShardedLock::new(BTreeMap::new()),
+            ShardedLock::new(BTreeMap::new()),
+            ShardedLock::new(BTreeMap::new()),
+            ShardedLock::new(BTreeMap::new()),
+            ShardedLock::new(BTreeMap::new()),
+            ShardedLock::new(BTreeMap::new()),
+        ]);
+
+        let level_counter = Arc::new([
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+            AtomicUsize::new(0),
+        ]);
+
+        for log in log_manager.iter() {
+            match log.add_flag {
+                1 => {
+                    let table_path = base_path.join(format!("sstable_{}_{}", log.level, log.id));
+                    let sstable_file = std::fs::OpenOptions::new()
+                        .read(true)
+                        .write(true).open(table_path).unwrap(); // TODO: handle error here
+                    let sstable = SSTable::open(sstable_file).unwrap(); // TODO: handle error here
+                    sstables.get(log.level as usize).unwrap().write().unwrap().insert(log.id as usize, sstable); // TODO: handle error here
+                    level_counter.get(log.level as usize).unwrap().fetch_max(log.id as usize, Ordering::SeqCst);
+                }
+                0 => {
+                    sstables.get(log.level as usize).unwrap().write().unwrap().remove(&(log.id as usize));
+                }
+                _ => unreachable!()
+            }
+        }
 
         ManifestManager {
             base_dir: base_dir.to_string(),
-            log_manager: LogManager::open(manifest_path, 4 * 1024).unwrap(), // TODO: handle error here
+            log_manager, // TODO: handle error here
             frozen_databases,
-            sstables: Arc::new([
-                ShardedLock::new(BTreeMap::new()),
-                ShardedLock::new(BTreeMap::new()),
-                ShardedLock::new(BTreeMap::new()),
-                ShardedLock::new(BTreeMap::new()),
-                ShardedLock::new(BTreeMap::new()),
-                ShardedLock::new(BTreeMap::new()),
-            ]),
-            level_counter: Arc::new([
-                AtomicUsize::new(0),
-                AtomicUsize::new(0),
-                AtomicUsize::new(0),
-                AtomicUsize::new(0),
-                AtomicUsize::new(0),
-                AtomicUsize::new(0),
-            ]), // TODO: restore sstables and level_counter from log
+            sstables,
+            level_counter, // TODO: restore sstables and level_counter from log
         }
     }
 
@@ -119,24 +143,25 @@ impl ManifestManager {
     pub fn background_work(&self) -> UnboundedSender<usize> {
         let frozen_databases = self.frozen_databases.clone();
 
-        let (freeze_sender, mut freeze_receiver) = unbounded::<usize>();
+        let (freeze_sender, freeze_receiver) = unbounded::<usize>();
+        let mut freeze_receiver = freeze_receiver.fuse();
 
         let base_dir = self.base_dir.clone();
         let level_counter = self.level_counter.clone();
         let sstables = self.sstables.clone();
+        let log_manager = self.log_manager.clone();
 
         std::thread::Builder::new()
             .name("background_worker".to_string())
             .spawn(move || {
                 let mut local_pool = LocalPool::new();
-
-                let base_dir = base_dir.clone();
-                let level_counter = level_counter.clone();
-                let sstables = sstables.clone();
                 local_pool.spawner().spawn_local(async move {
                     let base_path = Path::new(&base_dir);
                     loop {
-                        let newest_log_id = freeze_receiver.select_next_some().await;
+                        let newest_log_id = match freeze_receiver.next().await {
+                            Some(id) => id,
+                            None => {break;}
+                        };
                         let new_log_path = base_path.join(format!(
                             "log.{}",
                             newest_log_id
@@ -152,6 +177,13 @@ impl ManifestManager {
 
                                 let table_path = base_path.join(format! {"sstable_0_{}", id});
                                 sstable.save(table_path.to_str().unwrap()).await; // TODO: handle error here
+
+                                log_manager.add_entry(RawManifestLogEntry {
+                                    real_flag: 1,
+                                    add_flag: 1,
+                                    level: 0,
+                                    id: id as u8,
+                                });
 
                                 sstables[0].write().unwrap().insert(id, sstable);
                                 frozen_databases.write().unwrap().pop_back();

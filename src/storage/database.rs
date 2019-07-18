@@ -319,4 +319,46 @@ mod tests {
             assert_eq!(ret[0], (key.clone(), value));
         })
     }
+
+    #[test]
+    fn restore_after_big_request_test() {
+        let keys = generate_keys(1024 * 16);
+        let values = generate_values(1024 * 16);
+
+        let keys = &keys;
+        let values = &values;
+
+        let database = DatabaseBuilder::default().restore(false).build().unwrap();
+        futures::executor::block_on(async move {
+            for index in 0..(1024 * 16) {
+                let key = Slice(keys[index].clone());
+                let value = Slice(values[index].clone());
+
+                println!("PUT {}", index);
+                database.put(key, value).await.unwrap();
+            }
+
+            println!("PUT FINISH");
+            for index in 0..(1024 * 16) {
+                let key = Slice(keys[index].clone());
+                let value = Slice(values[index].clone());
+
+                println!("GET {}", index);
+                let ans = database.get(key).await.unwrap();
+                assert_eq!(ans, value);
+            }
+            println!("GET FINISH");
+        });
+
+        let database = DatabaseBuilder::default().restore(true).build().unwrap();
+        futures::executor::block_on(async move {
+            for index in 0..(1024 * 16) {
+                let key = Slice(keys[index].clone());
+                let value = Slice(values[index].clone());
+
+                let ans = database.get(key).await.unwrap();
+                assert_eq!(ans, value);
+            }
+        });
+    }
 }
