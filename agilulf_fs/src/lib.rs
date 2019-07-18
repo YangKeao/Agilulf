@@ -151,9 +151,9 @@ mod tests {
         futures::executor::block_on(async move {
             let content = b"TEST_CONTENT".to_vec();
 
-            file.write(0, content.as_slice());
+            file.write(0, content.as_slice()).await;
 
-            let mut reader = std::fs::File::open("/tmp/test_file").unwrap();
+            let mut reader = std::fs::File::open("/tmp/test_file2").unwrap();
             let mut buf = Vec::new();
             reader.read_to_end(&mut buf);
 
