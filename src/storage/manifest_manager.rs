@@ -116,10 +116,10 @@ impl ManifestManager {
 
     fn compact<S: Spawn>(&self, mut spawner: S) {}
 
-    pub fn freeze(&self) -> UnboundedSender<usize> {
+    pub fn background_work(&self) -> UnboundedSender<usize> {
         let frozen_databases = self.frozen_databases.clone();
 
-        let (sender, mut receiver) = unbounded::<usize>();
+        let (freeze_sender, mut freeze_receiver) = unbounded::<usize>();
 
         let base_dir = self.base_dir.clone();
         let level_counter = self.level_counter.clone();
@@ -129,10 +129,14 @@ impl ManifestManager {
             .name("background_worker".to_string())
             .spawn(move || {
                 let mut local_pool = LocalPool::new();
+
+                let base_dir = base_dir.clone();
+                let level_counter = level_counter.clone();
+                let sstables = sstables.clone();
                 local_pool.spawner().spawn_local(async move {
                     let base_path = Path::new(&base_dir);
                     loop {
-                        let newest_log_id = receiver.select_next_some().await;
+                        let newest_log_id = freeze_receiver.select_next_some().await;
                         let new_log_path = base_path.join(format!(
                             "log.{}",
                             newest_log_id
@@ -163,7 +167,7 @@ impl ManifestManager {
             })
             .unwrap();
 
-        sender
+        freeze_sender
     }
 
     pub fn find_key(&self, key: Slice) -> Option<Slice> {
