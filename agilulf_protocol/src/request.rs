@@ -1,10 +1,7 @@
 use super::message::{MessageHead, PartHead};
 use super::{AsyncReadBuffer, ProtocolError, Result, Slice};
-use futures::task::Context;
-use futures::Future;
-use futures::FutureExt;
-use futures::{AsyncRead, AsyncWrite, Poll, Stream};
-use std::pin::Pin;
+
+use futures::{AsyncRead, Stream};
 
 pub async fn read_message<T: AsyncRead + Unpin>(
     buf: &mut AsyncReadBuffer<T>,

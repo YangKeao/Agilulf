@@ -1,13 +1,10 @@
 use super::async_buffer::AsyncWriteBuffer;
 use super::message::{MessageHead, PartHead};
 use super::{AsyncReadBuffer, DatabaseResult, ProtocolError, Result, Slice};
-use crate::Command;
-use futures::stream::iter;
-use futures::task::Context;
-use futures::{AsyncRead, AsyncWrite, AsyncWriteExt, Future, Poll, Sink, SinkExt, Stream};
-use std::collections::VecDeque;
+
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt, Sink, SinkExt, Stream};
+
 use std::error::Error;
-use std::pin::Pin;
 
 #[derive(PartialEq, Debug)]
 pub enum Status {
@@ -139,7 +136,7 @@ impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
 impl<T: AsyncWrite + Unpin + 'static> AsyncWriteBuffer<T> {
     pub fn into_reply_sink(self) -> impl Sink<Reply, Error = ProtocolError> {
         self.stream.into_sink().with(|reply: Reply| {
-            let mut reply: Vec<u8> = reply.into();
+            let reply: Vec<u8> = reply.into();
             futures::future::ready(Result::Ok(reply))
         })
     }

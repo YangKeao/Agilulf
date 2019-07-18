@@ -6,12 +6,10 @@ extern crate quick_error;
 extern crate lazy_static;
 
 use nix::fcntl;
-use std::borrow::Borrow;
 use std::os::raw::c_int;
-use std::path::Path;
 use std::pin::Pin;
-use std::sync::{Arc, Once};
-use std::sync::{RwLock, RwLockReadGuard};
+use std::sync::Once;
+use std::sync::RwLock;
 
 type RawFd = c_int;
 
@@ -21,7 +19,7 @@ use futures::task::{Context, Waker};
 use futures::{Future, Poll};
 use nix::sys::aio::{AioCb, LioOpcode};
 use nix::sys::signal::{self, SigevNotify, Signal};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 static AIO_SIGNAL_HANDLER: Once = Once::new();
 lazy_static! {
@@ -77,7 +75,7 @@ impl File {
 
     //noinspection RsTypeCheck
     pub fn write<'a>(&self, offset: i64, buf: &'a [u8]) -> WriteFile<'a> {
-        let mut aio_cb = AioCb::from_slice(
+        let aio_cb = AioCb::from_slice(
             self.fd,
             offset,
             buf,
@@ -117,7 +115,7 @@ impl<'a> Future for WriteFile<'a> {
             });
 
             match this.aio_cb.write() {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(err) => return Poll::Ready(Err(err.into())),
             }
         }
@@ -126,10 +124,9 @@ impl<'a> Future for WriteFile<'a> {
             return Poll::Pending; // TODO: handle other error here
         } else {
             match this.aio_cb.aio_return() {
-                Ok(status) => return Poll::Ready(Ok(())),
+                Ok(_status) => return Poll::Ready(Ok(())),
                 Err(err) => return Poll::Ready(Err(err.into())),
             }
-
         }
     }
 }

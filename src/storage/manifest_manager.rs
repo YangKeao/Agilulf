@@ -2,14 +2,14 @@ use super::error::{StorageError, StorageResult};
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
 use crate::storage::SyncDatabase;
-use crate::{MemDatabase};
+use crate::MemDatabase;
 
 use agilulf_protocol::Slice;
 use crossbeam::sync::ShardedLock;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::executor::LocalPool;
 use futures::stream::StreamExt;
-use futures::task::{LocalSpawnExt};
+use futures::task::LocalSpawnExt;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
@@ -172,9 +172,9 @@ impl ManifestManager {
         })
     }
 
-//    fn compact<S: Spawn>(&self, _spawner: S) {
-//        unimplemented!()
-//    }
+    //    fn compact<S: Spawn>(&self, _spawner: S) {
+    //        unimplemented!()
+    //    }
 
     pub fn background_work(&self) -> StorageResult<UnboundedSender<usize>> {
         let frozen_databases = self.frozen_databases.clone();
@@ -250,10 +250,8 @@ impl ManifestManager {
                 });
 
                 match spawn_result {
-                    Ok(()) => {},
-                    Err(err) => {
-                        log::error!("Error while spawning: {}", err)
-                    }
+                    Ok(()) => {}
+                    Err(err) => log::error!("Error while spawning: {}", err),
                 }
 
                 local_pool.run();

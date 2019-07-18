@@ -1,6 +1,6 @@
 #![feature(async_await)]
 
-use agilulf::{DatabaseBuilder, MemDatabase, Server};
+use agilulf::{DatabaseBuilder, Server};
 use agilulf_driver::MultiAgilulfClient;
 use agilulf_protocol::{Command, GetCommand, PutCommand, Reply, Slice};
 use futures::executor::ThreadPool;
@@ -78,7 +78,7 @@ fn main() {
         let client = connect(7890).await;
 
         let (put_request, get_request) = generate_request(10000);
-        let (put_big_requests, get_big_requests) = generate_request(100000);
+        let (put_big_requests, _get_big_requests) = generate_request(100000);
 
         let now = Instant::now();
         let mut time = Duration::new(0, 0);

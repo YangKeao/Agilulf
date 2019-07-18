@@ -12,11 +12,11 @@ use crossbeam::sync::ShardedLock;
 use futures::channel::mpsc::UnboundedSender;
 use futures::Future;
 use std::collections::VecDeque;
+use std::error::Error;
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::error::Error;
 
 pub struct DatabaseBuilder {
     base_dir: String,
@@ -173,18 +173,24 @@ impl AsyncDatabase for Database {
         value: Slice,
     ) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
-            match self.database_log
+            match self
+                .database_log
                 .read()
                 .unwrap()
-                .put_sync(key.clone(), value.clone()) {
-                Ok(()) => {},
-                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+                .put_sync(key.clone(), value.clone())
+            {
+                Ok(()) => {}
+                Err(err) => {
+                    return Err(DatabaseError::InternalError(err.description().to_string()))
+                }
             };
             let ret = self.mem_database.read().unwrap().put_sync(key, value);
 
             match self.check_mem_database() {
-                Ok(()) => {},
-                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+                Ok(()) => {}
+                Err(err) => {
+                    return Err(DatabaseError::InternalError(err.description().to_string()))
+                }
             };
 
             ret
@@ -212,18 +218,19 @@ impl AsyncDatabase for Database {
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
-            match self.database_log
-                .read()
-                .unwrap()
-                .delete_sync(key.clone()) {
-                Ok(()) => {},
-                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+            match self.database_log.read().unwrap().delete_sync(key.clone()) {
+                Ok(()) => {}
+                Err(err) => {
+                    return Err(DatabaseError::InternalError(err.description().to_string()))
+                }
             };
             let ret = self.mem_database.read().unwrap().delete_sync(key);
 
             match self.check_mem_database() {
-                Ok(()) => {},
-                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+                Ok(()) => {}
+                Err(err) => {
+                    return Err(DatabaseError::InternalError(err.description().to_string()))
+                }
             };
 
             ret
