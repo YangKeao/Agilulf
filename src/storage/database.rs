@@ -1,8 +1,10 @@
 use super::database_log::DatabaseLog;
+use super::error::{StorageError, StorageResult};
 use super::manifest_manager::ManifestManager;
 use super::mem_database::MemDatabase;
+use super::merge::merge_iter;
 use super::{AsyncDatabase, SyncDatabase};
-use crate::storage::merge::merge_iter;
+
 use agilulf_protocol::error::database_error::{DatabaseError, Result as DatabaseResult};
 use agilulf_protocol::Slice;
 
@@ -29,14 +31,6 @@ impl Default for DatabaseBuilder {
     }
 }
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum BuildError {
-
-    }
-}
-pub type BuildResult<T> = std::result::Result<T, BuildError>;
-
 impl DatabaseBuilder {
     pub fn restore(&mut self, restore: bool) -> &mut Self {
         self.restore = restore;
@@ -46,31 +40,23 @@ impl DatabaseBuilder {
         self.base_dir = base_dir;
         self
     }
-    pub fn build(&self) -> BuildResult<Database> {
-        let base_path = Path::new(&self.base_dir); // TODO: handle error here
+    pub fn build(&self) -> StorageResult<Database> {
+        let base_path = Path::new(&self.base_dir);
 
         let log_path = base_path.join("log");
-        let log_path = log_path.to_str().unwrap(); // TODO: handle error here
+        let log_path = match log_path.to_str() {
+            Some(str) => str,
+            None => {
+                log::error!("Path is not UTF-8");
+                return Err(StorageError::UnicodeError);
+            }
+        };
 
         let log_length = 4 * 1024 * 2;
 
         let database_log = match self.restore {
-            true => {
-                match DatabaseLog::open(log_path, log_length) {
-                    Ok(database_log) => database_log,
-                    Err(_err) => {
-                        panic!() // TODO: handle error here
-                    }
-                }
-            }
-            false => {
-                match DatabaseLog::create_new(log_path, log_length) {
-                    Ok(database_log) => database_log,
-                    Err(_err) => {
-                        panic!() // TODO: handle error here
-                    }
-                }
-            }
+            true => DatabaseLog::open(log_path, log_length)?,
+            false => DatabaseLog::create_new(log_path, log_length)?,
         };
 
         let mem_database = if self.restore {
@@ -82,9 +68,9 @@ impl DatabaseBuilder {
         let frozen_databases_queue = Arc::new(ShardedLock::new(VecDeque::new()));
 
         let manifest_manager = if self.restore {
-            ManifestManager::open(self.base_dir.as_str(), frozen_databases_queue.clone())
+            ManifestManager::open(self.base_dir.as_str(), frozen_databases_queue.clone())?
         } else {
-            ManifestManager::create_new(self.base_dir.as_str(), frozen_databases_queue.clone())
+            ManifestManager::create_new(self.base_dir.as_str(), frozen_databases_queue.clone())?
         };
         let freeze_notifier = manifest_manager.background_work();
 
@@ -111,7 +97,7 @@ pub struct Database {
 }
 
 impl Database {
-    fn check_mem_database(&self) {
+    fn check_mem_database(&self) -> StorageResult<()> {
         if self.mem_database.read().unwrap().large_enough() {
             let base_path = Path::new(&self.base_dir);
 
@@ -126,12 +112,24 @@ impl Database {
 
             let log_id = self.log_counter.fetch_add(1, Ordering::SeqCst);
             let new_log_path = base_path.join(format!("log.{}", log_id));
-            let new_log_path = new_log_path.to_str().unwrap(); // TODO: handle error here
+            let new_log_path = match new_log_path.to_str() {
+                Some(str) => str,
+                None => {
+                    log::error!("log path {:#?} is not UTF-8", new_log_path);
+                    return Err(StorageError::UnicodeError);
+                }
+            };
             self.database_log.read().unwrap().rename(new_log_path);
 
             let log_path = base_path.join("log");
-            let log_path = log_path.to_str().unwrap(); // TODO: handle error here
-            let new_log = DatabaseLog::create_new(log_path, 4 * 1024 * 2).unwrap(); // TODO: handle error here
+            let log_path = match log_path.to_str() {
+                Some(str) => str,
+                None => {
+                    log::error!("log path {:#?} is not UTF-8", log_path);
+                    return Err(StorageError::UnicodeError);
+                }
+            };
+            let new_log = DatabaseLog::create_new(log_path, 4 * 1024 * 2)?;
             self.database_log
                 .write()
                 .unwrap()
@@ -139,7 +137,9 @@ impl Database {
 
             frozen_queue.push_front(old_database);
             self.freeze_notifier.clone().unbounded_send(log_id);
-        }
+        };
+
+        Ok(())
     }
 }
 

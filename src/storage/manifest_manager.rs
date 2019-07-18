@@ -1,7 +1,9 @@
+use super::error::{StorageError, StorageResult};
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
 use crate::storage::SyncDatabase;
 use crate::{AsyncDatabase, MemDatabase};
+
 use agilulf_protocol::Slice;
 use crossbeam::sync::ShardedLock;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
@@ -51,15 +53,15 @@ impl ManifestManager {
     pub fn create_new(
         base_dir: &str,
         frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
-    ) -> ManifestManager {
-        let base_path = Path::new(base_dir); // TODO: handle error here
+    ) -> StorageResult<ManifestManager> {
+        let base_path = Path::new(base_dir);
         let base_path = base_path.join("MANIFEST");
 
         let manifest_path = base_path.to_str().unwrap();
 
-        ManifestManager {
+        Ok(ManifestManager {
             base_dir: base_dir.to_string(),
-            log_manager: Arc::new(LogManager::create_new(manifest_path, 4 * 1024).unwrap()), // TODO: handle error here
+            log_manager: Arc::new(LogManager::create_new(manifest_path, 4 * 1024)?),
             frozen_databases,
             sstables: Arc::new([
                 ShardedLock::new(BTreeMap::new()),
@@ -77,19 +79,19 @@ impl ManifestManager {
                 AtomicUsize::new(0),
                 AtomicUsize::new(0),
             ]), // TODO: use macro to avoid these redundant codes
-        }
+        })
     }
 
     pub fn open(
         base_dir: &str,
         frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
-    ) -> ManifestManager {
-        let base_path = Path::new(base_dir); // TODO: handle error here
+    ) -> StorageResult<ManifestManager> {
+        let base_path = Path::new(base_dir);
         let manifest_path = base_path.join("MANIFEST");
 
         let manifest_path = manifest_path.to_str().unwrap();
         let log_manager: Arc<LogManager<RawManifestLogEntry>> =
-            Arc::new(LogManager::open(manifest_path, 4 * 1024).unwrap());
+            Arc::new(LogManager::open(manifest_path, 4 * 1024)?);
 
         let sstables = Arc::new([
             ShardedLock::new(BTreeMap::new()),
@@ -112,28 +114,35 @@ impl ManifestManager {
         for log in log_manager.iter() {
             match log.add_flag {
                 1 => {
+                    if log.level >= 6 {
+                        return Err(StorageError::ManifestLogFormatError);
+                    }
+
                     let table_path = base_path.join(format!("sstable_{}_{}", log.level, log.id));
                     let sstable_file = std::fs::OpenOptions::new()
                         .read(true)
                         .write(true)
-                        .open(table_path)
-                        .unwrap(); // TODO: handle error here
-                    let sstable = SSTable::open(sstable_file).unwrap(); // TODO: handle error here
+                        .open(table_path)?;
+                    let sstable = SSTable::open(sstable_file)?;
                     sstables
                         .get(log.level as usize)
-                        .unwrap()
+                        .unwrap() // unwrap here is totally safe
                         .write()
-                        .unwrap()
-                        .insert(log.id as usize, sstable); // TODO: handle error here
+                        .unwrap() // Ignore PoisonError
+                        .insert(log.id as usize, sstable);
                     level_counter
                         .get(log.level as usize)
-                        .unwrap()
+                        .unwrap() // unwrap here is totally safe
                         .fetch_max(log.id as usize, Ordering::SeqCst);
                 }
                 0 => {
+                    if log.level >= 6 {
+                        return Err(StorageError::ManifestLogFormatError);
+                    }
+
                     sstables
                         .get(log.level as usize)
-                        .unwrap()
+                        .unwrap() // unwrap here is totally safe
                         .write()
                         .unwrap()
                         .remove(&(log.id as usize));
@@ -142,13 +151,13 @@ impl ManifestManager {
             }
         }
 
-        ManifestManager {
+        Ok(ManifestManager {
             base_dir: base_dir.to_string(),
-            log_manager, // TODO: handle error here
+            log_manager,
             frozen_databases,
             sstables,
-            level_counter, // TODO: restore sstables and level_counter from log
-        }
+            level_counter,
+        })
     }
 
     fn compact<S: Spawn>(&self, _spawner: S) {}
@@ -188,7 +197,13 @@ impl ManifestManager {
                                 let id = level_counter[0].fetch_add(1, Ordering::SeqCst);
 
                                 let table_path = base_path.join(format! {"sstable_0_{}", id});
-                                sstable.save(table_path.to_str().unwrap()).await; // TODO: handle error here
+                                match sstable.save(table_path.to_str().unwrap()).await {
+                                    Ok(()) => {}
+                                    Err(err) => {
+                                        log::error!("Error while storing SSTable: {}", err);
+                                        continue;
+                                    }
+                                }
 
                                 log_manager.add_entry(RawManifestLogEntry {
                                     real_flag: 1,

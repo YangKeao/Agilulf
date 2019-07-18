@@ -41,16 +41,13 @@ impl Server {
             let stream: TcpStream = stream.unwrap();
 
             let database = self.database.clone();
-            thread_pool
-                .spawn(async move {
-                    match handle_stream(stream, database).await {
-                        Ok(()) => {},
-                        Err(err) => {
-                            log::error!("Error while handling stream: {}", err)
-                        }
-                    }
-                })?
-        };
+            thread_pool.spawn(async move {
+                match handle_stream(stream, database).await {
+                    Ok(()) => {}
+                    Err(err) => log::error!("Error while handling stream: {}", err),
+                }
+            })?
+        }
         Ok(())
     }
 

@@ -1,5 +1,6 @@
-mod database;
+pub mod database;
 mod database_log;
+pub mod error;
 mod manifest_manager;
 pub mod mem_database;
 mod merge;
