@@ -12,13 +12,13 @@ use std::pin::Pin;
 use crate::storage::database_log::DatabaseLog;
 
 pub trait SyncDatabase: Send + Sync {
-    fn get(&self, key: Slice) -> Result<Slice>;
+    fn get_sync(&self, key: Slice) -> Result<Slice>;
 
-    fn put(&self, key: Slice, value: Slice) -> Result<()>;
+    fn put_sync(&self, key: Slice, value: Slice) -> Result<()>;
 
-    fn scan(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)>;
+    fn scan_sync(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)>;
 
-    fn delete(&self, key: Slice) -> Result<()>;
+    fn delete_sync(&self, key: Slice) -> Result<()>;
 }
 
 pub trait AsyncDatabase: Send + Sync {
@@ -42,7 +42,7 @@ pub trait AsyncDatabase: Send + Sync {
 impl<T: SyncDatabase> AsyncDatabase for T {
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<Slice>> + Send + '_>> {
         Box::pin(async move {
-            self.get(key)
+            self.get_sync(key)
         })
     }
 
@@ -52,7 +52,7 @@ impl<T: SyncDatabase> AsyncDatabase for T {
         value: Slice,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         Box::pin(async move {
-            self.put(key, value)
+            self.put_sync(key, value)
         })
     }
 
@@ -62,13 +62,13 @@ impl<T: SyncDatabase> AsyncDatabase for T {
         end: Slice,
     ) -> Pin<Box<dyn Future<Output = Vec<(Slice, Slice)>> + Send + '_>> {
         Box::pin(async move {
-            self.scan(start, end)
+            self.scan_sync(start, end)
         })
     }
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>> {
         Box::pin(async move {
-            self.delete(key)
+            self.delete_sync(key)
         })
     }
 }

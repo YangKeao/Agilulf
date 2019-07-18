@@ -28,15 +28,19 @@ impl MemDatabase {
         for command in iter {
             match command {
                 Command::PUT(command) => {
-                    SyncDatabase::put(&mem_db, command.key, command.value);
+                    SyncDatabase::put_sync(&mem_db, command.key, command.value);
                 }
                 Command::DELETE(command) => {
-                    SyncDatabase::delete(&mem_db, command.key);
+                    SyncDatabase::delete_sync(&mem_db, command.key);
                 }
                 _ => unreachable!(),
             }
         }
         mem_db
+    }
+
+    pub fn large_enough(&self) -> bool {
+        unsafe { (*self.inner.load(Ordering::SeqCst)).len() > 4 * 1024 }
     }
 }
 
@@ -56,7 +60,7 @@ impl Drop for MemDatabase {
 }
 
 impl SyncDatabase for MemDatabase {
-    fn get(&self, key: Slice) -> Result<Slice> {
+    fn get_sync(&self, key: Slice) -> Result<Slice> {
         unsafe {
             match (*self.inner.load(Ordering::SeqCst)).find(&key) {
                 Some(value) => match value {
@@ -68,14 +72,14 @@ impl SyncDatabase for MemDatabase {
         }
     }
 
-    fn put(&self, key: Slice, value: Slice) -> Result<()> {
+    fn put_sync(&self, key: Slice, value: Slice) -> Result<()> {
         unsafe {
             (*self.inner.load(Ordering::SeqCst)).insert(&key, &Value::Slice(value));
         }
         Ok(())
     }
 
-    fn scan(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)> {
+    fn scan_sync(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)> {
         unsafe {
             (*self.inner.load(Ordering::SeqCst))
                 .scan(start..end)
@@ -88,7 +92,7 @@ impl SyncDatabase for MemDatabase {
         }
     }
 
-    fn delete(&self, key: Slice) -> Result<()> {
+    fn delete_sync(&self, key: Slice) -> Result<()> {
         unsafe {
             (*self.inner.load(Ordering::SeqCst)).insert(&key, &Value::NotExist);
         }

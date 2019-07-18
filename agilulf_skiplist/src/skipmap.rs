@@ -71,6 +71,10 @@ impl<T: Default + Clone> SkipMap<T> {
         }
     }
 
+    pub fn len(&self) -> u64 {
+        self.serial_number.load(Ordering::SeqCst)
+    }
+
     pub fn insert(&self, key: &Slice, value: &T) {
         let new_item = Item {
             key: NonStandardSlice::Slice(key.clone()),

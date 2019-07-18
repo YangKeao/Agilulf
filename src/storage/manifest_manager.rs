@@ -1,18 +1,12 @@
 use super::database_log::DatabaseLog;
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
+use crossbeam::sync::ShardedLock;
+use futures::task::Spawn;
 use memmap::{MmapMut, MmapOptions};
 use std::collections::BTreeMap;
-
-pub struct SSTableId {
-    level: usize,
-    id: usize,
-}
-
-pub enum ManifestLogEntry {
-    ADD(SSTableId),
-    RemoveEntry(SSTableId),
-}
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Mutex, RwLock};
 
 #[repr(packed)]
 #[derive(Clone)]
@@ -44,7 +38,11 @@ pub struct ManifestLog {
 impl ManifestLog {}
 
 pub struct ManifestManager {
-    sstables: BTreeMap<usize, BTreeMap<usize, SSTable>>,
+    sstables: ShardedLock<BTreeMap<usize, BTreeMap<usize, SSTable>>>, // TODO: a concurrent RwLock may be better
 }
 
-impl ManifestManager {}
+impl ManifestManager {
+    fn compact<S: Spawn>(&self, spawner: S) {}
+
+    fn freeze(&self) {}
+}

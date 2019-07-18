@@ -51,20 +51,20 @@ pub struct LogManager<T: JudgeReal + Clone> {
 }
 
 impl<T: JudgeReal + Clone> LogManager<T> {
-    pub fn create_new(path: &str) -> Result<LogManager<T>> {
+    pub fn create_new(path: &str, length: usize) -> Result<LogManager<T>> {
         std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(path)?;
 
-        LogManager::open(path)
+        LogManager::open(path, length)
     }
 
-    pub fn open(path: &str) -> Result<LogManager<T>> {
+    pub fn open(path: &str, length: usize) -> Result<LogManager<T>> {
         {
             let file = agilulf_fs::File::open(path)?;
-            file.fallocate(0, (unsafe { size_of::<T>() } * 4 * 1024 * 2) as i64);
+            file.fallocate(0, (unsafe { size_of::<T>() } * length) as i64);
         }
 
         let file = std::fs::OpenOptions::new()

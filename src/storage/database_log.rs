@@ -63,12 +63,12 @@ pub struct DatabaseLog {
 }
 
 impl DatabaseLog {
-    pub fn create_new(path: &str) -> Result<DatabaseLog> {
-        let log_manager = LogManager::create_new(path)?;
+    pub fn create_new(path: &str, length: usize) -> Result<DatabaseLog> {
+        let log_manager = LogManager::create_new(path, length)?;
         Ok(DatabaseLog { log_manager })
     }
-    pub fn open(path: &str) -> Result<DatabaseLog> {
-        let log_manager = LogManager::open(path)?;
+    pub fn open(path: &str, length: usize) -> Result<DatabaseLog> {
+        let log_manager = LogManager::open(path, length)?;
         Ok(DatabaseLog { log_manager })
     }
 
@@ -80,11 +80,11 @@ impl DatabaseLog {
 }
 
 impl SyncDatabase for DatabaseLog {
-    fn get(&self, key: Slice) -> DatabaseResult<Slice> {
+    fn get_sync(&self, key: Slice) -> DatabaseResult<Slice> {
         panic!("Cannot read from log directly")
     }
 
-    fn put(&self, key: Slice, value: Slice) -> DatabaseResult<()> {
+    fn put_sync(&self, key: Slice, value: Slice) -> DatabaseResult<()> {
         let mut key_slice = [0u8; 8];
         key_slice[0..key.0.len()].clone_from_slice(key.0.as_slice());
         let mut value_slice = [0u8; 256];
@@ -101,11 +101,11 @@ impl SyncDatabase for DatabaseLog {
         Ok(())
     }
 
-    fn scan(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)> {
+    fn scan_sync(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)> {
         panic!("Cannot read from log directly")
     }
 
-    fn delete(&self, key: Slice) -> DatabaseResult<()> {
+    fn delete_sync(&self, key: Slice) -> DatabaseResult<()> {
         let mut key_slice = [0u8; 8];
         key_slice[0..key.0.len()].clone_from_slice(key.0.as_slice());
         let mut value_slice = [0u8; 256];

@@ -47,23 +47,23 @@ pub struct SSTable {
 }
 
 impl SyncDatabase for SSTable {
-    fn get(&self, key: Slice) -> Result<Slice> {
+    fn get_sync(&self, key: Slice) -> Result<Slice> {
         let index = self.kv_pairs.binary_search_by_key(&key);
 
         Ok(self.kv_pairs[index].1.clone())
     }
 
-    fn put(&self, _: Slice, _: Slice) -> Result<()> {
+    fn put_sync(&self, _: Slice, _: Slice) -> Result<()> {
         panic!("Cannot modify SSTable")
     }
 
-    fn scan(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)> {
+    fn scan_sync(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)> {
         let start_index = self.kv_pairs.binary_search_by_key(&start);
         let end_index = self.kv_pairs.binary_search_by_key(&end);
         self.kv_pairs[start_index..end_index].to_vec()
     }
 
-    fn delete(&self, _: Slice) -> Result<()> {
+    fn delete_sync(&self, _: Slice) -> Result<()> {
         panic!("Cannot modify SSTable")
     }
 }
@@ -77,7 +77,7 @@ impl SearchIndex for Vec<(Slice, Slice)> {
 impl From<MemDatabase> for SSTable {
     fn from(mem_database: MemDatabase) -> Self {
         let kv_pairs: Box<Vec<(Slice, Slice)>> =
-            box SyncDatabase::scan(&mem_database, Slice(Vec::new()), Slice(vec![255; 8]))
+            box SyncDatabase::scan_sync(&mem_database, Slice(Vec::new()), Slice(vec![255; 8]))
                 .into_iter()
                 .collect();
 
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn save_sstable() {
         let db = MemDatabase::default();
-        SyncDatabase::put(&db, Slice(b"HELLO".to_vec()), Slice(b"WORLD".to_vec())).unwrap();
+        SyncDatabase::put_sync(&db, Slice(b"HELLO".to_vec()), Slice(b"WORLD".to_vec())).unwrap();
 
         let sstable: SSTable = db.into();
         futures::executor::block_on(async move {
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn read_sstable() {
         let db = MemDatabase::default();
-        SyncDatabase::put(&db, Slice(b"HELLO".to_vec()), Slice(b"WORLD".to_vec())).unwrap();
+        SyncDatabase::put_sync(&db, Slice(b"HELLO".to_vec()), Slice(b"WORLD".to_vec())).unwrap();
 
         let sstable: SSTable = db.into();
         futures::executor::block_on(async move {
@@ -226,7 +226,7 @@ mod tests {
 
         let file = std::fs::File::open("/tmp/test_table").unwrap();
         let sstable = SSTable::open(file).unwrap();
-        let value = SyncDatabase::get(&sstable, Slice(b"HELLO\0\0\0".to_vec())).unwrap();
+        let value = SyncDatabase::get_sync(&sstable, Slice(b"HELLO\0\0\0".to_vec())).unwrap();
 
         assert_eq!(&value.0[0..5], b"WORLD");
     }
