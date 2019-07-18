@@ -95,7 +95,14 @@ pub const PART_LENGTH: usize = 256 + 8;
 
 struct SliceMmap {
     inner_mmap: memmap::Mmap,
-    inner_vec: Vec<(Slice, Slice)>,
+    inner_vec: Option<Vec<(Slice, Slice)>>,
+}
+
+impl Drop for SliceMmap {
+    fn drop(&mut self) {
+        let inner_vec = self.inner_vec.take();
+        std::mem::forget(inner_vec);
+    }
 }
 
 impl SliceMmap {
@@ -120,7 +127,7 @@ impl SliceMmap {
 
             SliceMmap {
                 inner_mmap: mmap,
-                inner_vec,
+                inner_vec: Some(inner_vec),
             }
         }
     }
@@ -128,7 +135,10 @@ impl SliceMmap {
 
 impl SearchIndex for SliceMmap {
     fn len(&self) -> usize {
-        self.inner_vec.len()
+        match &self.inner_vec {
+            Some(inner_vec) => inner_vec.len(),
+            None => unreachable!()
+        }
     }
 }
 
@@ -136,7 +146,10 @@ impl Index<std::ops::Range<usize>> for SliceMmap {
     type Output = [(Slice, Slice)];
 
     fn index(&self, index: Range<usize>) -> &Self::Output {
-        self.inner_vec.index(index)
+        match &self.inner_vec {
+            Some(inner_vec) => inner_vec.index(index),
+            None => unreachable!()
+        }
     }
 }
 
@@ -144,7 +157,10 @@ impl Index<usize> for SliceMmap {
     type Output = (Slice, Slice);
 
     fn index(&self, index: usize) -> &Self::Output {
-        self.inner_vec.index(index)
+        match &self.inner_vec {
+            Some(inner_vec) => inner_vec.index(index),
+            None => unreachable!()
+        }
     }
 }
 

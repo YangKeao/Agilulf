@@ -160,7 +160,9 @@ impl ManifestManager {
                     loop {
                         let newest_log_id = match freeze_receiver.next().await {
                             Some(id) => id,
-                            None => {break;}
+                            None => {
+                                break;
+                            }
                         };
                         let new_log_path = base_path.join(format!(
                             "log.{}",
@@ -195,7 +197,7 @@ impl ManifestManager {
                     }
                 });
 
-                local_pool.run()
+                local_pool.run();
             })
             .unwrap();
 
