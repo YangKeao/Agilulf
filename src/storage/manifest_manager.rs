@@ -4,7 +4,7 @@ use crate::log::{JudgeReal, LogManager};
 use crate::storage::SyncDatabase;
 use crate::{AsyncDatabase, MemDatabase};
 use agilulf_protocol::Slice;
-use crossbeam::channel::{unbounded, Sender};
+use futures::channel::mpsc::{UnboundedSender, unbounded};
 use crossbeam::sync::ShardedLock;
 use futures::executor::LocalPool;
 use futures::stream::StreamExt;
@@ -116,10 +116,10 @@ impl ManifestManager {
 
     fn compact<S: Spawn>(&self, mut spawner: S) {}
 
-    pub fn freeze(&self) -> Sender<()> {
+    pub fn freeze(&self) -> UnboundedSender<usize> {
         let frozen_databases = self.frozen_databases.clone();
 
-        let (sender, mut receiver) = unbounded::<()>();
+        let (sender, mut receiver) = unbounded::<usize>();
 
         let base_dir = self.base_dir.clone();
         let level_counter = self.level_counter.clone();
@@ -132,7 +132,12 @@ impl ManifestManager {
                 local_pool.spawner().spawn_local(async move {
                     let base_path = Path::new(&base_dir);
                     loop {
-                        receiver.recv();
+                        let newest_log_id = receiver.select_next_some().await;
+                        let new_log_path = base_path.join(format!(
+                            "log.{}",
+                            newest_log_id
+                        ));
+
                         let db_guard = frozen_databases.read().unwrap();
                         match db_guard.back() {
                             Some(db) => {
@@ -141,11 +146,13 @@ impl ManifestManager {
 
                                 let id = level_counter[0].fetch_add(1, Ordering::SeqCst);
 
-                                let table_path = base_path.join(format! {"0_{}", id});
+                                let table_path = base_path.join(format! {"sstable_0_{}", id});
                                 sstable.save(table_path.to_str().unwrap()).await; // TODO: handle error here
 
                                 sstables[0].write().unwrap().insert(id, sstable);
                                 frozen_databases.write().unwrap().pop_back();
+
+                                std::fs::remove_file(new_log_path);
                             }
                             None => {}
                         }

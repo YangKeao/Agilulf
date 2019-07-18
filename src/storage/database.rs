@@ -6,7 +6,7 @@ use crate::storage::merge::merge_iter;
 use agilulf_protocol::error::database_error::{DatabaseError, Result as DatabaseResult};
 use agilulf_protocol::Slice;
 use crossbeam::atomic::AtomicCell;
-use crossbeam::channel::{unbounded, Sender};
+use futures::channel::mpsc::{unbounded, UnboundedSender};
 use crossbeam::sync::ShardedLock;
 use futures::{Future, SinkExt};
 use std::collections::VecDeque;
@@ -107,7 +107,7 @@ pub struct Database {
     base_dir: String,
     log_counter: AtomicUsize,
     manifest_manager: ManifestManager,
-    freeze_notifier: Sender<()>,
+    freeze_notifier: UnboundedSender<usize>,
 }
 
 impl Database {
@@ -117,7 +117,6 @@ impl Database {
 
             let old_database = self.mem_database.read().unwrap().clone();
             let mut frozen_queue = self.frozen_databases.write().unwrap();
-            self.freeze_notifier.send(());
 
             let new_database = MemDatabase::default();
             self.mem_database
@@ -125,9 +124,10 @@ impl Database {
                 .unwrap()
                 .clone_from(&Arc::new(new_database));
 
+            let log_id = self.log_counter.fetch_add(1, Ordering::SeqCst);
             let new_log_path = base_path.join(format!(
                 "log.{}",
-                self.log_counter.fetch_add(1, Ordering::SeqCst)
+                log_id
             ));
             let new_log_path = new_log_path.to_str().unwrap(); // TODO: handle error here
             self.database_log.read().unwrap().rename(new_log_path);
@@ -141,6 +141,7 @@ impl Database {
                 .clone_from(&Arc::new(new_log));
 
             frozen_queue.push_front(old_database);
+            self.freeze_notifier.clone().unbounded_send(log_id);
         }
     }
 }
