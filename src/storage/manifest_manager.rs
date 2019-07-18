@@ -1,23 +1,20 @@
-use super::database_log::DatabaseLog;
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
 use crate::storage::SyncDatabase;
 use crate::{AsyncDatabase, MemDatabase};
 use agilulf_protocol::Slice;
-use futures::channel::mpsc::{UnboundedSender, unbounded};
 use crossbeam::sync::ShardedLock;
+use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::executor::LocalPool;
 use futures::stream::StreamExt;
-use futures::task::{LocalSpawn, LocalSpawnExt, Spawn, SpawnExt};
-use futures::Future;
-use memmap::{MmapMut, MmapOptions};
+use futures::task::{LocalSpawnExt, Spawn, SpawnExt};
+
 use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
-use std::pin::Pin;
+
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
-use std::hint::unreachable_unchecked;
+use std::sync::Arc;
 
 #[repr(packed)]
 #[derive(Clone)]
@@ -91,7 +88,8 @@ impl ManifestManager {
         let manifest_path = base_path.join("MANIFEST");
 
         let manifest_path = manifest_path.to_str().unwrap();
-        let log_manager: Arc<LogManager<RawManifestLogEntry>> = Arc::new(LogManager::open(manifest_path, 4 * 1024).unwrap());
+        let log_manager: Arc<LogManager<RawManifestLogEntry>> =
+            Arc::new(LogManager::open(manifest_path, 4 * 1024).unwrap());
 
         let sstables = Arc::new([
             ShardedLock::new(BTreeMap::new()),
@@ -117,15 +115,30 @@ impl ManifestManager {
                     let table_path = base_path.join(format!("sstable_{}_{}", log.level, log.id));
                     let sstable_file = std::fs::OpenOptions::new()
                         .read(true)
-                        .write(true).open(table_path).unwrap(); // TODO: handle error here
+                        .write(true)
+                        .open(table_path)
+                        .unwrap(); // TODO: handle error here
                     let sstable = SSTable::open(sstable_file).unwrap(); // TODO: handle error here
-                    sstables.get(log.level as usize).unwrap().write().unwrap().insert(log.id as usize, sstable); // TODO: handle error here
-                    level_counter.get(log.level as usize).unwrap().fetch_max(log.id as usize, Ordering::SeqCst);
+                    sstables
+                        .get(log.level as usize)
+                        .unwrap()
+                        .write()
+                        .unwrap()
+                        .insert(log.id as usize, sstable); // TODO: handle error here
+                    level_counter
+                        .get(log.level as usize)
+                        .unwrap()
+                        .fetch_max(log.id as usize, Ordering::SeqCst);
                 }
                 0 => {
-                    sstables.get(log.level as usize).unwrap().write().unwrap().remove(&(log.id as usize));
+                    sstables
+                        .get(log.level as usize)
+                        .unwrap()
+                        .write()
+                        .unwrap()
+                        .remove(&(log.id as usize));
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
 
@@ -138,7 +151,7 @@ impl ManifestManager {
         }
     }
 
-    fn compact<S: Spawn>(&self, mut spawner: S) {}
+    fn compact<S: Spawn>(&self, _spawner: S) {}
 
     pub fn background_work(&self) -> UnboundedSender<usize> {
         let frozen_databases = self.frozen_databases.clone();
@@ -164,10 +177,7 @@ impl ManifestManager {
                                 break;
                             }
                         };
-                        let new_log_path = base_path.join(format!(
-                            "log.{}",
-                            newest_log_id
-                        ));
+                        let new_log_path = base_path.join(format!("log.{}", newest_log_id));
 
                         let db_guard = frozen_databases.read().unwrap();
                         match db_guard.back() {
@@ -207,7 +217,7 @@ impl ManifestManager {
     pub fn find_key(&self, key: Slice) -> Option<Slice> {
         for level in 0..6 {
             let level = self.sstables[level].read().unwrap();
-            for (id, table) in level.iter() {
+            for (_id, table) in level.iter() {
                 match table.get_sync(key.clone()) {
                     Ok(value) => return Some(value),
                     Err(_) => {}

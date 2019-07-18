@@ -137,7 +137,7 @@ impl SearchIndex for SliceMmap {
     fn len(&self) -> usize {
         match &self.inner_vec {
             Some(inner_vec) => inner_vec.len(),
-            None => unreachable!()
+            None => unreachable!(),
         }
     }
 }
@@ -148,7 +148,7 @@ impl Index<std::ops::Range<usize>> for SliceMmap {
     fn index(&self, index: Range<usize>) -> &Self::Output {
         match &self.inner_vec {
             Some(inner_vec) => inner_vec.index(index),
-            None => unreachable!()
+            None => unreachable!(),
         }
     }
 }
@@ -159,7 +159,7 @@ impl Index<usize> for SliceMmap {
     fn index(&self, index: usize) -> &Self::Output {
         match &self.inner_vec {
             Some(inner_vec) => inner_vec.index(index),
-            None => unreachable!()
+            None => unreachable!(),
         }
     }
 }

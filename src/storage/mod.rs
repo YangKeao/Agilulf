@@ -7,7 +7,6 @@ mod sstable;
 
 use agilulf_protocol::Slice;
 
-use crate::storage::database_log::DatabaseLog;
 use agilulf_protocol::error::database_error::Result;
 use futures::Future;
 use std::pin::Pin;

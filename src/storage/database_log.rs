@@ -1,13 +1,9 @@
-use super::sstable::PART_LENGTH;
 use super::Result as DatabaseResult;
 use super::SyncDatabase;
 use crate::log::{JudgeReal, Result};
 use crate::log::{LogIterator, LogManager};
-use agilulf_protocol::error::database_error::DatabaseError;
+
 use agilulf_protocol::{Command, DeleteCommand, PutCommand, Slice};
-use memmap::{MmapMut, MmapOptions};
-use std::mem::size_of;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[repr(packed)]
 #[derive(Clone)]
@@ -84,7 +80,7 @@ impl DatabaseLog {
 }
 
 impl SyncDatabase for DatabaseLog {
-    fn get_sync(&self, key: Slice) -> DatabaseResult<Slice> {
+    fn get_sync(&self, _key: Slice) -> DatabaseResult<Slice> {
         panic!("Cannot read from log directly")
     }
 
@@ -105,14 +101,14 @@ impl SyncDatabase for DatabaseLog {
         Ok(())
     }
 
-    fn scan_sync(&self, start: Slice, end: Slice) -> Vec<(Slice, Slice)> {
+    fn scan_sync(&self, _start: Slice, _end: Slice) -> Vec<(Slice, Slice)> {
         panic!("Cannot read from log directly")
     }
 
     fn delete_sync(&self, key: Slice) -> DatabaseResult<()> {
         let mut key_slice = [0u8; 8];
         key_slice[0..key.0.len()].clone_from_slice(key.0.as_slice());
-        let mut value_slice = [0u8; 256];
+        let value_slice = [0u8; 256];
 
         let record = RawRecord {
             real_flag: 1,

@@ -5,10 +5,10 @@ use super::{AsyncDatabase, SyncDatabase};
 use crate::storage::merge::merge_iter;
 use agilulf_protocol::error::database_error::{DatabaseError, Result as DatabaseResult};
 use agilulf_protocol::Slice;
-use crossbeam::atomic::AtomicCell;
-use futures::channel::mpsc::{unbounded, UnboundedSender};
+
 use crossbeam::sync::ShardedLock;
-use futures::{Future, SinkExt};
+use futures::channel::mpsc::UnboundedSender;
+use futures::Future;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::pin::Pin;
@@ -58,7 +58,7 @@ impl DatabaseBuilder {
             true => {
                 match DatabaseLog::open(log_path, log_length) {
                     Ok(database_log) => database_log,
-                    Err(err) => {
+                    Err(_err) => {
                         panic!() // TODO: handle error here
                     }
                 }
@@ -66,7 +66,7 @@ impl DatabaseBuilder {
             false => {
                 match DatabaseLog::create_new(log_path, log_length) {
                     Ok(database_log) => database_log,
-                    Err(err) => {
+                    Err(_err) => {
                         panic!() // TODO: handle error here
                     }
                 }
@@ -125,10 +125,7 @@ impl Database {
                 .clone_from(&Arc::new(new_database));
 
             let log_id = self.log_counter.fetch_add(1, Ordering::SeqCst);
-            let new_log_path = base_path.join(format!(
-                "log.{}",
-                log_id
-            ));
+            let new_log_path = base_path.join(format!("log.{}", log_id));
             let new_log_path = new_log_path.to_str().unwrap(); // TODO: handle error here
             self.database_log.read().unwrap().rename(new_log_path);
 
@@ -149,7 +146,7 @@ impl Database {
 impl AsyncDatabase for Database {
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<Slice>> + Send + '_>> {
         Box::pin(async move {
-            let mut ret = self.mem_database.read().unwrap().get_sync(key.clone());
+            let ret = self.mem_database.read().unwrap().get_sync(key.clone());
 
             if ret.is_err() {
                 for db in self.frozen_databases.read().unwrap().iter() {
@@ -221,7 +218,7 @@ impl AsyncDatabase for Database {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agilulf_protocol::{Command, PutCommand};
+    use agilulf_protocol::Command;
     use rand::distributions::Standard;
     use rand::{thread_rng, Rng};
 
