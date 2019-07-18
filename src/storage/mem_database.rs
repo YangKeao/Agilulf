@@ -1,6 +1,7 @@
 use super::{Slice, SyncDatabase};
 use agilulf_protocol::error::database_error::{DatabaseError, Result};
 
+use agilulf_protocol::Command;
 use agilulf_skiplist::skipmap::SkipMap;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
@@ -21,7 +22,23 @@ pub struct MemDatabase {
     inner: AtomicPtr<SkipMap<Value>>,
 }
 
-impl MemDatabase {}
+impl MemDatabase {
+    pub fn restore_from_iterator<I: Iterator<Item = Command>>(iter: I) -> MemDatabase {
+        let mem_db = MemDatabase::default();
+        for command in iter {
+            match command {
+                Command::PUT(command) => {
+                    SyncDatabase::put(&mem_db, command.key, command.value);
+                }
+                Command::DELETE(command) => {
+                    SyncDatabase::delete(&mem_db, command.key);
+                }
+                _ => unreachable!(),
+            }
+        }
+        mem_db
+    }
+}
 
 impl Default for MemDatabase {
     fn default() -> Self {

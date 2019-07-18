@@ -46,7 +46,7 @@ extern "C" fn handle_sig_io(_: i32, info: *mut libc::siginfo_t, _: *mut libc::c_
 }
 
 pub struct File {
-    fd: RawFd,
+    pub fd: RawFd,
 }
 
 impl File {
@@ -57,7 +57,7 @@ impl File {
         let fd = fcntl::open(
             path,
             OFlag::O_RDWR | OFlag::O_CREAT,
-            Mode::S_IRUSR | Mode::S_IWUSR,
+            Mode::S_IRUSR | Mode::S_IWUSR
         )?;
 
         AIO_SIGNAL_HANDLER.call_once(|| {
@@ -90,6 +90,11 @@ impl File {
             aio_cb,
             register: AtomicUsize::new(0),
         }
+    }
+
+    //noinspection RsTypeCheck
+    pub fn fallocate(&self, offset: i64, len: i64) {
+        fcntl::fallocate(self.fd, fcntl::FallocateFlags::empty(), offset, len);
     }
 }
 

@@ -1,4 +1,7 @@
 pub mod mem_database;
+mod database;
+mod manifest_manager;
+mod log_manager;
 mod sstable;
 
 use agilulf_protocol::Slice;
@@ -6,6 +9,7 @@ use agilulf_protocol::Slice;
 use agilulf_protocol::error::database_error::Result;
 use futures::Future;
 use std::pin::Pin;
+use crate::storage::log_manager::LogManager;
 
 pub trait SyncDatabase: Send + Sync {
     fn get(&self, key: Slice) -> Result<Slice>;
