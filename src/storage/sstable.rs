@@ -93,7 +93,7 @@ impl<T: Borrow<MemDatabase>> From<T> for SSTable {
 pub const PART_LENGTH: usize = 256 + 8;
 
 struct SliceMmap {
-    inner_mmap: memmap::Mmap,
+    _inner_mmap: memmap::Mmap,
     inner_vec: Option<Vec<(Slice, Slice)>>,
 }
 
@@ -125,7 +125,7 @@ impl SliceMmap {
             }
 
             SliceMmap {
-                inner_mmap: mmap,
+                _inner_mmap: mmap,
                 inner_vec: Some(inner_vec),
             }
         }

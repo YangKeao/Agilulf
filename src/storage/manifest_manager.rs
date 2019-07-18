@@ -2,14 +2,14 @@ use super::error::{StorageError, StorageResult};
 use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
 use crate::storage::SyncDatabase;
-use crate::{AsyncDatabase, MemDatabase};
+use crate::{MemDatabase};
 
 use agilulf_protocol::Slice;
 use crossbeam::sync::ShardedLock;
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use futures::executor::LocalPool;
 use futures::stream::StreamExt;
-use futures::task::{LocalSpawnExt, Spawn, SpawnExt};
+use futures::task::{LocalSpawnExt};
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
@@ -172,7 +172,9 @@ impl ManifestManager {
         })
     }
 
-    fn compact<S: Spawn>(&self, _spawner: S) {}
+//    fn compact<S: Spawn>(&self, _spawner: S) {
+//        unimplemented!()
+//    }
 
     pub fn background_work(&self) -> StorageResult<UnboundedSender<usize>> {
         let frozen_databases = self.frozen_databases.clone();
@@ -189,7 +191,7 @@ impl ManifestManager {
             .name("background_worker".to_string())
             .spawn(move || {
                 let mut local_pool = LocalPool::new();
-                local_pool.spawner().spawn_local(async move {
+                let spawn_result = local_pool.spawner().spawn_local(async move {
                     let base_path = Path::new(&base_dir);
                     loop {
                         let newest_log_id = match freeze_receiver.next().await {
@@ -234,12 +236,25 @@ impl ManifestManager {
                                 sstables[0].write().unwrap().insert(id, sstable);
                                 frozen_databases.write().unwrap().pop_back();
 
-                                std::fs::remove_file(new_log_path);
+                                match std::fs::remove_file(new_log_path) {
+                                    Ok(()) => {}
+                                    Err(err) => {
+                                        log::error!("Error while remove log: {}", err);
+                                        continue;
+                                    }
+                                };
                             }
                             None => {}
                         }
                     }
                 });
+
+                match spawn_result {
+                    Ok(()) => {},
+                    Err(err) => {
+                        log::error!("Error while spawning: {}", err)
+                    }
+                }
 
                 local_pool.run();
             })?;

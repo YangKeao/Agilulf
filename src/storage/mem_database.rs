@@ -1,6 +1,7 @@
 use super::{Slice, SyncDatabase};
 use agilulf_protocol::error::database_error::{DatabaseError, Result};
 
+use crate::storage::error::StorageResult;
 use agilulf_protocol::Command;
 use agilulf_skiplist::skipmap::SkipMap;
 use std::sync::atomic::AtomicPtr;
@@ -23,20 +24,22 @@ pub struct MemDatabase {
 }
 
 impl MemDatabase {
-    pub fn restore_from_iterator<I: Iterator<Item = Command>>(iter: I) -> MemDatabase {
+    pub fn restore_from_iterator<I: Iterator<Item = Command>>(
+        iter: I,
+    ) -> StorageResult<MemDatabase> {
         let mem_db = MemDatabase::default();
         for command in iter {
             match command {
                 Command::PUT(command) => {
-                    SyncDatabase::put_sync(&mem_db, command.key, command.value);
+                    SyncDatabase::put_sync(&mem_db, command.key, command.value)?;
                 }
                 Command::DELETE(command) => {
-                    SyncDatabase::delete_sync(&mem_db, command.key);
+                    SyncDatabase::delete_sync(&mem_db, command.key)?;
                 }
                 _ => unreachable!(),
             }
         }
-        mem_db
+        Ok(mem_db)
     }
 
     pub fn large_enough(&self) -> bool {

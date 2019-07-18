@@ -1,5 +1,6 @@
 use super::sstable::SSTableError;
 use crate::log::LogError;
+use agilulf_protocol::error::database_error::DatabaseError;
 
 quick_error! {
     #[derive(Debug)]
@@ -13,6 +14,12 @@ quick_error! {
             from()
         }
         SSTableError(err: SSTableError) {
+            from()
+        }
+        BackgroundWorkerChannelSendError(err: futures::channel::mpsc::TrySendError<usize>) {
+            from()
+        }
+        RestoreError(err:DatabaseError ) {
             from()
         }
     }

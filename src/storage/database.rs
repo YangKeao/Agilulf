@@ -16,6 +16,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::error::Error;
 
 pub struct DatabaseBuilder {
     base_dir: String,
@@ -60,7 +61,7 @@ impl DatabaseBuilder {
         };
 
         let mem_database = if self.restore {
-            MemDatabase::restore_from_iterator(database_log.iter())
+            MemDatabase::restore_from_iterator(database_log.iter())?
         } else {
             MemDatabase::default()
         };
@@ -119,7 +120,7 @@ impl Database {
                     return Err(StorageError::UnicodeError);
                 }
             };
-            self.database_log.read().unwrap().rename(new_log_path);
+            self.database_log.read().unwrap().rename(new_log_path)?;
 
             let log_path = base_path.join("log");
             let log_path = match log_path.to_str() {
@@ -136,7 +137,7 @@ impl Database {
                 .clone_from(&Arc::new(new_log));
 
             frozen_queue.push_front(old_database);
-            self.freeze_notifier.clone().unbounded_send(log_id);
+            self.freeze_notifier.clone().unbounded_send(log_id)?;
         };
 
         Ok(())
@@ -172,13 +173,19 @@ impl AsyncDatabase for Database {
         value: Slice,
     ) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
-            self.database_log
+            match self.database_log
                 .read()
                 .unwrap()
-                .put_sync(key.clone(), value.clone());
+                .put_sync(key.clone(), value.clone()) {
+                Ok(()) => {},
+                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+            };
             let ret = self.mem_database.read().unwrap().put_sync(key, value);
 
-            self.check_mem_database();
+            match self.check_mem_database() {
+                Ok(()) => {},
+                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+            };
 
             ret
         })
@@ -205,10 +212,19 @@ impl AsyncDatabase for Database {
 
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
-            self.database_log.read().unwrap().delete_sync(key.clone());
+            match self.database_log
+                .read()
+                .unwrap()
+                .delete_sync(key.clone()) {
+                Ok(()) => {},
+                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+            };
             let ret = self.mem_database.read().unwrap().delete_sync(key);
 
-            self.check_mem_database();
+            match self.check_mem_database() {
+                Ok(()) => {},
+                Err(err) => return Err(DatabaseError::InternalError(err.description().to_string()))
+            };
 
             ret
         })

@@ -52,7 +52,7 @@ impl Server {
     }
 
     pub fn run(self) -> Result<()> {
-        executor::block_on(async { self.run_async().await });
+        executor::block_on(async { self.run_async().await })?;
 
         Ok(())
     }

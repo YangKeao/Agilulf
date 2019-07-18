@@ -116,14 +116,20 @@ impl<'a> Future for WriteFile<'a> {
                 si_value: add_to_waker_list(waker) as isize,
             });
 
-            this.aio_cb.write().unwrap(); // TODO: handle this error
+            match this.aio_cb.write() {
+                Ok(()) => {},
+                Err(err) => return Poll::Ready(Err(err.into())),
+            }
         }
 
         if let Err(_) = this.aio_cb.error() {
             return Poll::Pending; // TODO: handle other error here
         } else {
-            this.aio_cb.aio_return().unwrap(); // TODO: handle error here
-            return Poll::Ready(Ok(()));
+            match this.aio_cb.aio_return() {
+                Ok(status) => return Poll::Ready(Ok(())),
+                Err(err) => return Poll::Ready(Err(err.into())),
+            }
+
         }
     }
 }
