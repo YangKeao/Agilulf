@@ -55,9 +55,15 @@ impl ManifestManager {
         frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
     ) -> StorageResult<ManifestManager> {
         let base_path = Path::new(base_dir);
-        let base_path = base_path.join("MANIFEST");
+        let manifest_path = base_path.join("MANIFEST");
 
-        let manifest_path = base_path.to_str().unwrap();
+        let manifest_path = match manifest_path.to_str() {
+            Some(str) => str,
+            None => {
+                log::error!("Manifest path is not UTF-8: {:#?}", manifest_path);
+                return Err(StorageError::UnicodeError);
+            }
+        };
 
         Ok(ManifestManager {
             base_dir: base_dir.to_string(),
@@ -89,7 +95,13 @@ impl ManifestManager {
         let base_path = Path::new(base_dir);
         let manifest_path = base_path.join("MANIFEST");
 
-        let manifest_path = manifest_path.to_str().unwrap();
+        let manifest_path = match manifest_path.to_str() {
+            Some(str) => str,
+            None => {
+                log::error!("Manifest path is not UTF-8: {:#?}", manifest_path);
+                return Err(StorageError::UnicodeError);
+            }
+        };
         let log_manager: Arc<LogManager<RawManifestLogEntry>> =
             Arc::new(LogManager::open(manifest_path, 4 * 1024)?);
 
@@ -128,7 +140,7 @@ impl ManifestManager {
                         .get(log.level as usize)
                         .unwrap() // unwrap here is totally safe
                         .write()
-                        .unwrap() // Ignore PoisonError
+                        .unwrap()
                         .insert(log.id as usize, sstable);
                     level_counter
                         .get(log.level as usize)
@@ -162,7 +174,7 @@ impl ManifestManager {
 
     fn compact<S: Spawn>(&self, _spawner: S) {}
 
-    pub fn background_work(&self) -> UnboundedSender<usize> {
+    pub fn background_work(&self) -> StorageResult<UnboundedSender<usize>> {
         let frozen_databases = self.frozen_databases.clone();
 
         let (freeze_sender, freeze_receiver) = unbounded::<usize>();
@@ -197,7 +209,14 @@ impl ManifestManager {
                                 let id = level_counter[0].fetch_add(1, Ordering::SeqCst);
 
                                 let table_path = base_path.join(format! {"sstable_0_{}", id});
-                                match sstable.save(table_path.to_str().unwrap()).await {
+                                let table_path = match table_path.to_str() {
+                                    Some(str) => str,
+                                    None => {
+                                        log::error!("Table path is not UTF-8: {:#?}", table_path);
+                                        continue;
+                                    }
+                                };
+                                match sstable.save(table_path).await {
                                     Ok(()) => {}
                                     Err(err) => {
                                         log::error!("Error while storing SSTable: {}", err);
@@ -223,10 +242,9 @@ impl ManifestManager {
                 });
 
                 local_pool.run();
-            })
-            .unwrap();
+            })?;
 
-        freeze_sender
+        Ok(freeze_sender)
     }
 
     pub fn find_key(&self, key: Slice) -> Option<Slice> {

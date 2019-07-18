@@ -14,36 +14,48 @@ impl<T: Iterator<Item = (Slice, Slice)>> Iterator for MergeIter<T> {
         let mut min_index = 0;
         for (index, iter) in self.iters.iter_mut().enumerate() {
             let item = iter.peek();
-            if item.is_some() {
-                let item = item.unwrap();
-                if tmp_ret.is_none() {
-                    tmp_ret = Some((item.0.clone(), item.1.clone()));
-                    min_index = index;
-                } else {
-                    let cmp = tmp_ret.as_ref().unwrap().cmp(item);
-                    match cmp {
-                        Ordering::Less => {}
-                        Ordering::Equal => {
-                            while iter.peek().is_some()
-                                && (iter.peek().unwrap() == tmp_ret.as_ref().unwrap())
-                            {
-                                iter.next();
+            match item {
+                Some(item) => match &tmp_ret {
+                    None => {
+                        tmp_ret = Some((item.0.clone(), item.1.clone()));
+                        min_index = index;
+                    }
+                    Some(ret) => {
+                        let cmp = ret.cmp(item);
+                        match cmp {
+                            Ordering::Less => {}
+                            Ordering::Equal => {
+                                while let Some(content) = iter.peek() {
+                                    if content == ret {
+                                        iter.next();
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                continue;
                             }
-                            continue;
-                        }
-                        Ordering::Greater => {
-                            tmp_ret = Some((item.0.clone(), item.1.clone()));
-                            min_index = index;
+                            Ordering::Greater => {
+                                tmp_ret = Some((item.0.clone(), item.1.clone()));
+                                min_index = index;
+                            }
                         }
                     }
-                }
+                },
+                None => {}
             }
         }
 
-        while self.iters[min_index].peek().is_some()
-            && (self.iters[min_index].peek().unwrap() == tmp_ret.as_ref().unwrap())
-        {
-            self.iters[min_index].next();
+        while let Some(content) = self.iters[min_index].peek() {
+            match tmp_ret.as_ref() {
+                Some(ret) => {
+                    if ret == content {
+                        self.iters[min_index].next();
+                    }
+                }
+                None => {
+                    break;
+                }
+            }
         }
 
         tmp_ret

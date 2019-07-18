@@ -72,7 +72,7 @@ impl DatabaseBuilder {
         } else {
             ManifestManager::create_new(self.base_dir.as_str(), frozen_databases_queue.clone())?
         };
-        let freeze_notifier = manifest_manager.background_work();
+        let freeze_notifier = manifest_manager.background_work()?;
 
         Ok(Database {
             frozen_databases: frozen_databases_queue,
