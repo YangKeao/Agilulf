@@ -33,8 +33,8 @@ impl Server {
         })
     }
 
-    pub async fn run_async(mut self) {
-        let mut thread_pool = ThreadPool::new().unwrap(); // TODO: handler error here
+    pub async fn run_async(mut self) -> Result<()> {
+        let mut thread_pool = ThreadPool::new()?;
 
         let mut incoming = self.listener.incoming();
         while let Some(stream) = incoming.next().await {
@@ -43,10 +43,15 @@ impl Server {
             let database = self.database.clone();
             thread_pool
                 .spawn(async move {
-                    handle_stream(stream, database).await.unwrap(); // TODO: handle error here
-                })
-                .unwrap(); // TODO: handler error here
-        }
+                    match handle_stream(stream, database).await {
+                        Ok(()) => {},
+                        Err(err) => {
+                            log::error!("Error while handling stream: {}", err)
+                        }
+                    }
+                })?
+        };
+        Ok(())
     }
 
     pub fn run(self) -> Result<()> {
@@ -57,7 +62,7 @@ impl Server {
 }
 
 async fn handle_stream(stream: TcpStream, database: Arc<dyn AsyncDatabase>) -> Result<()> {
-    let remote_addr = stream.peer_addr()?; // TODO: handle error here
+    let remote_addr = stream.peer_addr()?;
     info!("Accepting stream from: {}", remote_addr);
 
     let (reader, writer) = stream.split();

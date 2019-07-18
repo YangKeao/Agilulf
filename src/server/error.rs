@@ -7,6 +7,9 @@ quick_error! {
         IOError(err: std::io::Error) {
             from()
         }
+        SpawnError(err: futures::task::SpawnError) {
+            from()
+        }
     }
 }
 
