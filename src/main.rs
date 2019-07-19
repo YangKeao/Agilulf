@@ -64,7 +64,7 @@ fn main() {
             match builder.build() {
                 Ok(db) => Server::new(address, db),
                 Err(err) => {
-                    println!("Error occurred during building database: {}", err);
+                    println!("Error occurred during building database: {:?}", err);
                     return;
                 }
             }
