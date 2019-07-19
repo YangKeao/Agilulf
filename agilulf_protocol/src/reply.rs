@@ -19,6 +19,12 @@ pub enum Reply {
     MultipleSliceReply(Vec<Slice>),
 }
 
+impl From<ProtocolError> for Reply {
+    fn from(err: ProtocolError) -> Self {
+        Reply::ErrorReply(err.description().to_string())
+    }
+}
+
 impl From<DatabaseResult<()>> for Reply {
     fn from(result: DatabaseResult<()>) -> Self {
         match result {
@@ -137,7 +143,6 @@ impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
 impl<T: AsyncWrite + Unpin + 'static> AsyncWriteBuffer<T> {
     /// Convert a `AsyncWriteBuffer` into `Sink<Reply, Error = ProtocolError>`.
     pub fn into_reply_sink(self) -> impl Sink<Reply, Error = ProtocolError> {
-        // TODO: make up a new Error. ProtocolError should be returned to client.
         self.stream.into_sink().with(|reply: Reply| {
             let reply: Vec<u8> = reply.into();
             futures::future::ready(Result::Ok(reply))

@@ -83,14 +83,17 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn AsyncDatabase>) -> R
                         ProtocolResult::Ok(database.delete(command.key).await.into())
                     }
                 },
-                Err(err) => ProtocolResult::Err(err),
+                Err(err) => {
+                    ProtocolResult::Ok(err.into())
+                },
             }
         })
     });
 
     loop {
         let command = command_stream.select_next_some().await;
-        if let Err(e) = process_sink.send(command).await {
+        if let Err(err) = process_sink.send(command).await {
+            log::error!("Error while sending reply {}", err);
             break;
         }
     }
