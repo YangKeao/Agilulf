@@ -33,7 +33,7 @@ pub trait SearchIndex:
     }
 
     fn first(&self) -> &(Slice, Slice) {
-        &self[self.len() - 1]
+        &self[0]
     }
 
     fn last(&self) -> &(Slice, Slice) {
@@ -48,6 +48,9 @@ pub struct SSTable {
 
 impl SyncDatabase for SSTable {
     fn get_sync(&self, key: Slice) -> Result<Slice> {
+        if &self.kv_pairs.first().0 > &key || &self.kv_pairs.last().0 < &key {
+            return Err(DatabaseError::KeyNotFound);
+        }
         let index = self.kv_pairs.binary_search_by_key(&key);
 
         if self.kv_pairs[index].0.cmp(&key) == Ordering::Equal {
