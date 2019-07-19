@@ -19,6 +19,7 @@
 //! for this operation.
 
 #![feature(async_await)]
+#![feature(async_closure)]
 #![feature(test)]
 #![allow(clippy::needless_lifetimes)]
 

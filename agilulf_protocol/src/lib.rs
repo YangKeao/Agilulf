@@ -12,7 +12,6 @@
 #![feature(async_await)]
 #![feature(test)]
 #![allow(clippy::needless_lifetimes)]
-#![feature(type_alias_enum_variants)]
 
 #[macro_use]
 extern crate quick_error;
