@@ -1,0 +1,11 @@
+(function() {var implementors = {};
+implementors["agilulf_fs"] = [{text:"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html\" title=\"trait core::fmt::Debug\">Debug</a> for <a class=\"enum\" href=\"agilulf_fs/enum.FSError.html\" title=\"enum agilulf_fs::FSError\">FSError</a>",synthetic:false,types:["agilulf_fs::error::FSError"]},];
+implementors["agilulf_protocol"] = [{text:"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html\" title=\"trait core::fmt::Debug\">Debug</a> for <a class=\"enum\" href=\"agilulf_protocol/enum.DatabaseError.html\" title=\"enum agilulf_protocol::DatabaseError\">DatabaseError</a>",synthetic:false,types:["agilulf_protocol::error::database_error::DatabaseError"]},{text:"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html\" title=\"trait core::fmt::Debug\">Debug</a> for <a class=\"enum\" href=\"agilulf_protocol/enum.ProtocolError.html\" title=\"enum agilulf_protocol::ProtocolError\">ProtocolError</a>",synthetic:false,types:["agilulf_protocol::error::protocol_error::ProtocolError"]},{text:"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html\" title=\"trait core::fmt::Debug\">Debug</a> for <a class=\"enum\" href=\"agilulf_protocol/reply/enum.Status.html\" title=\"enum agilulf_protocol::reply::Status\">Status</a>",synthetic:false,types:["agilulf_protocol::reply::Status"]},{text:"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html\" title=\"trait core::fmt::Debug\">Debug</a> for <a class=\"enum\" href=\"agilulf_protocol/reply/enum.Reply.html\" title=\"enum agilulf_protocol::reply::Reply\">Reply</a>",synthetic:false,types:["agilulf_protocol::reply::Reply"]},{text:"impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/fmt/trait.Debug.html\" title=\"trait core::fmt::Debug\">Debug</a> for <a class=\"struct\" href=\"agilulf_protocol/struct.Slice.html\" title=\"struct agilulf_protocol::Slice\">Slice</a>",synthetic:false,types:["agilulf_protocol::slice::Slice"]},];
+
+            if (window.register_implementors) {
+                window.register_implementors(implementors);
+            } else {
+                window.pending_implementors = implementors;
+            }
+        
+})()

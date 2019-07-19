@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["SkipMap","A map contains a skiplist and a serial_number."]]});
