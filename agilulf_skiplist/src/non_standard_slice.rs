@@ -1,3 +1,5 @@
+/// Name of this mod comes from "Non Standard Analysis". Which invited "Infinity" as part of Real Number.
+/// (actually not real number)
 use agilulf_protocol::Slice;
 use std::cmp::Ordering;
 

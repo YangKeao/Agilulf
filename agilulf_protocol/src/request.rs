@@ -3,9 +3,7 @@ use super::{AsyncReadBuffer, ProtocolError, Result, Slice};
 
 use futures::{AsyncRead, Stream};
 
-async fn read_message<T: AsyncRead + Unpin>(
-    buf: &mut AsyncReadBuffer<T>,
-) -> Result<Vec<Vec<u8>>> {
+async fn read_message<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Result<Vec<Vec<u8>>> {
     let mut message = Vec::new();
 
     let line = buf.read_line().await?;

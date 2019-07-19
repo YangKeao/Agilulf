@@ -83,9 +83,7 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn AsyncDatabase>) -> R
                         ProtocolResult::Ok(database.delete(command.key).await.into())
                     }
                 },
-                Err(err) => {
-                    ProtocolResult::Ok(err.into())
-                },
+                Err(err) => ProtocolResult::Ok(err.into()),
             }
         })
     });

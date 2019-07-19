@@ -52,6 +52,23 @@ impl<T: Default + Clone> PartialEq for Item<T> {
     }
 }
 
+/// A map contains a skiplist and a serial_number.
+///
+/// ```ignore
+/// pub struct SkipMap<T: Default + Clone> {
+///     skiplist: SkipList<Item<T>>,
+///     serial_number: AtomicU64,
+/// }
+/// ```
+///
+/// `serial_number` is automatically increased. It's used to keep the order of insert: The later it
+/// is inserted, the smaller it is. (Actually the `serial_number` is bigger but the item is smaller
+/// according to the strategy of comparing item.
+///
+/// Generic parameter `T` should be `Default + Clone`. However the limitation can be relaxed to only
+/// `Default`. The `Clone` here is to avoid lifetime parameter and keep this crate simple. (And
+/// what we need to use for T is actually `Clone`). If we remove the `Clone` limitation, the `insert`
+/// method may need to receive a `T` but not `&T`
 pub struct SkipMap<T: Default + Clone> {
     skiplist: SkipList<Item<T>>,
     serial_number: AtomicU64,
@@ -75,6 +92,28 @@ impl<T: Default + Clone> SkipMap<T> {
         self.serial_number.load(Ordering::SeqCst)
     }
 
+    ///```
+    /// # use agilulf_skiplist::SkipMap;
+    /// # use agilulf_protocol::Slice;
+    /// let map: SkipMap<Slice> = SkipMap::default();
+    /// map.insert(&Slice(b"key1".to_vec()), &Slice(b"value1".to_vec()));
+    /// map.insert(&Slice(b"key2".to_vec()), &Slice(b"value2".to_vec()));
+    /// map.insert(&Slice(b"key3".to_vec()), &Slice(b"value3".to_vec()));
+    ///
+    /// assert_eq!(
+    ///     map.find(&Slice(b"key1".to_vec())).unwrap(),
+    ///     Slice(b"value1".to_vec())
+    /// );
+    ///
+    /// map.insert(
+    ///     &Slice(b"key1".to_vec()),
+    ///     &Slice(b"modified_value1".to_vec()),
+    /// );
+    /// assert_eq!(
+    ///     map.find(&Slice(b"key1".to_vec())).unwrap(),
+    ///     Slice(b"modified_value1".to_vec())
+    /// );
+    ///```
     pub fn insert(&self, key: &Slice, value: &T) {
         let new_item = Item {
             key: NonStandardSlice::Slice(key.clone()),
@@ -299,7 +338,7 @@ mod tests {
 
     #[test]
     fn update_test() {
-        let map: SkipMap<Slice> = SkipMap::new(0);
+        let map: SkipMap<Slice> = SkipMap::default();
         map.insert(&Slice(b"key1".to_vec()), &Slice(b"value1".to_vec()));
         map.insert(&Slice(b"key2".to_vec()), &Slice(b"value2".to_vec()));
         map.insert(&Slice(b"key3".to_vec()), &Slice(b"value3".to_vec()));

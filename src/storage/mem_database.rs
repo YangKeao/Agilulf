@@ -3,7 +3,7 @@ use agilulf_protocol::{DatabaseError, DatabaseResult as Result};
 
 use crate::storage::error::StorageResult;
 use agilulf_protocol::Command;
-use agilulf_skiplist::skipmap::SkipMap;
+use agilulf_skiplist::SkipMap;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
 
