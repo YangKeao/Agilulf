@@ -231,15 +231,24 @@ impl AsyncDatabase for Database {
         end: Slice,
     ) -> Pin<Box<dyn Future<Output = Vec<(Slice, Slice)>> + Send + '_>> {
         Box::pin(async move {
-            let mut merge_vec = Vec::new();
+            let mut merge_vec: Vec<Box<dyn Iterator<Item=(Slice, Slice)>>> = Vec::new();
             merge_vec.push(
-                self.mem_database
+                Box::new(self.mem_database
                     .read()
                     .unwrap()
-                    .scan_sync(start, end)
-                    .into_iter(),
+                    .scan_sync(start.clone(), end.clone())
+                    .into_iter())
             );
-            // TODO: Merge frozen_databases and sstables
+            for db in self.frozen_databases.read().unwrap().iter() {
+                merge_vec.push(
+                    Box::new(
+                        db.scan_sync(start.clone(), end.clone()).into_iter()
+                    )
+                );
+            }
+            merge_vec.push(
+                Box::new(self.manifest_manager.scan(start.clone(), end.clone()))
+            );
 
             merge_iter(merge_vec).collect()
         })

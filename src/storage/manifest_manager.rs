@@ -3,6 +3,7 @@ use super::sstable::SSTable;
 use crate::log::{JudgeReal, LogManager};
 use crate::storage::SyncDatabase;
 use crate::MemDatabase;
+use super::merge::merge_iter;
 
 use agilulf_protocol::Slice;
 use crossbeam::sync::ShardedLock;
@@ -271,5 +272,16 @@ impl ManifestManager {
             }
         }
         None
+    }
+
+    pub fn scan(&self, start: Slice, end: Slice) -> impl Iterator<Item=(Slice, Slice)> {
+        let mut merge_vec = Vec::new();
+        for level in 0..6 {
+            let level = self.sstables[level].read().unwrap();
+            for (_id, table) in level.iter() {
+                merge_vec.push(table.scan_sync(start.clone(), end.clone()).into_iter())
+            }
+        }
+        merge_iter(merge_vec)
     }
 }
