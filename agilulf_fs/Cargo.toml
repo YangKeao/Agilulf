@@ -3,6 +3,10 @@ name = "agilulf_fs"
 version = "0.1.0"
 authors = ["Yang Keao <keao.yang@yahoo.com>"]
 edition = "2018"
+description = "Async file IO abstract layer (with Linux AIO)"
+license = "MIT"
+homepage = "https://github.com/YangKeao/Agilulf/tree/master/agilulf_fs"
+repository = "https://github.com/YangKeao/Agilulf.git"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

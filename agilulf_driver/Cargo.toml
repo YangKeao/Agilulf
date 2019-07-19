@@ -3,18 +3,22 @@ name = "agilulf_driver"
 version = "0.1.0"
 authors = ["Yang Keao <keao.yang@yahoo.com>"]
 edition = "2018"
+description = "A client for agilulf KV server"
+license = "MIT"
+homepage = "https://github.com/YangKeao/Agilulf/tree/master/agilulf_driver"
+repository = "https://github.com/YangKeao/Agilulf.git"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 romio = "0.3.0-alpha.9"
 quick-error = "1.2.2"
-agilulf_protocol = {path="../agilulf_protocol"}
+agilulf_protocol = { version="0.1.0", path="../agilulf_protocol"}
 futures-preview = { version = "=0.3.0-alpha.17", features = ["async-await", "nightly"] }
 fnv = "1.0.6"
 
 [dev-dependencies]
-agilulf = {path="../"}
+agilulf = { version="0.1.0", path="../"}
 env_logger = "0.6.2"
 rand = "0.7"
 crossbeam-channel = "0.3"

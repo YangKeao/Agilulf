@@ -3,9 +3,13 @@ name = "agilulf_skiplist"
 version = "0.1.0"
 authors = ["Yang Keao <keao.yang@yahoo.com>"]
 edition = "2018"
+description = "A simple lock free skiplist/skipmap"
+license = "MIT"
+homepage = "https://github.com/YangKeao/Agilulf/tree/master/agilulf_skiplist"
+repository = "https://github.com/YangKeao/Agilulf.git"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-agilulf_protocol = {path = "../agilulf_protocol"}
+agilulf_protocol = { version="0.1.0", path = "../agilulf_protocol"}
 rand = "0.7"
