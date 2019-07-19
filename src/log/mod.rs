@@ -63,6 +63,8 @@ impl<T: JudgeReal + Clone> LogManager<T> {
     }
 
     pub fn open(path: &str, length: usize) -> Result<LogManager<T>> {
+        log::info!("Opening log from {:#?}", path);
+
         {
             let file = agilulf_fs::File::open(path)?;
             file.fallocate(0, (size_of::<T>() * length) as i64)?;

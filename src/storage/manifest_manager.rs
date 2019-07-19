@@ -132,6 +132,7 @@ impl ManifestManager {
                     }
 
                     let table_path = base_path.join(format!("sstable_{}_{}", log.level, log.id));
+                    log::info!("Restoring sstable from {:#?}", table_path);
                     let sstable_file = std::fs::OpenOptions::new()
                         .read(true)
                         .write(true)

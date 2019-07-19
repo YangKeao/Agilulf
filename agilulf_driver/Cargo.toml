@@ -18,3 +18,4 @@ agilulf = {path="../"}
 env_logger = "0.6.2"
 rand = "0.7"
 crossbeam-channel = "0.3"
+clap = "2.33.0"

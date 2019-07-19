@@ -107,7 +107,7 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn AsyncDatabase>) -> R
     loop {
         let command = command_stream.select_next_some().await;
         if let Err(err) = process_sink.send(command).await {
-            log::error!("Error while sending reply {}", err);
+            log::error!("Error while sending reply {:?}", err);
             break;
         }
     }
