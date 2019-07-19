@@ -98,3 +98,4 @@ is same with default addr of Agilulf Server.
 - [ ] Wait for `crossbeam-skiplist` to be stable and migrate to it
 - [ ] Compact SSTables into higher level
 - [ ] Restore data from frozen logs
+- [ ] Automatically increase the highest level of skipmap
