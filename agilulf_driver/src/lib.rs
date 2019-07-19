@@ -12,7 +12,8 @@
 //! The response order is kept consistent with request order.
 //!
 //! 2. `MultiAgilulfClient`: A client can use multiple TCP Stream. Use multiple TCP Stream at the same
-//! time can increase the performance quite well. A `MultiAgilulfClient` will open multiple `AgilulfClient`
+//! time can increase the performance quite well (according to the network situation). A
+//! `MultiAgilulfClient` will open multiple `AgilulfClient`
 //! and give them an ID. Any request will be hashed by key and send to corresponding client. As it is a
 //! KV server, just keeping operation order consistent of the same key is enough. **Note**: `SCAN` is
 //! different, this method will affect multiple keys. Guard (just like CPU's Memory Guard) is needed

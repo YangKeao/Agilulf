@@ -54,6 +54,27 @@ futures::executor::block_on(async {
 })
 ```
 
+### Benchmark
+
+A simple benchmark is provided in [agilulf_driver/examples](https://github.com/YangKeao/Agilulf/tree/master/agilulf_driver/examples)
+the `benchmark.rs` example will start up a server itself. And then send request to that server.
+
+```bash
+cargo run --example benchmark --release
+```
+
+**Note:** It will use `/var/tmp/agilulf` as it's base directory, so make sure this directory exists. Agilulf will
+not create directory for you.
+
+Another choice is `remote_benchmark.rs`
+
+```bash
+cargo run --example remote_benchmark --release -- --addr <ADDR>
+```
+
+You can setup a server yourself and send requests to that server. The default addr is "127.0.0.1:3421" which
+is the same as default addr of Agilulf Server.
+
 ## TODO
 
 - [x] AIO for writing files

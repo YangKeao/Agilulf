@@ -23,4 +23,4 @@ deploy:
   keep_history: true
   local_dir: ./target/doc
   on:
-    branch: gh-pages
+    branch: master
