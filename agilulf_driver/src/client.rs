@@ -14,6 +14,7 @@ use futures::{SinkExt, StreamExt};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+/// A simple single-thread client
 #[derive(Clone)]
 pub struct AgilulfClient {
     reply_receiver: Arc<Mutex<UnboundedReceiver<std::result::Result<Reply, ProtocolError>>>>,
@@ -94,6 +95,19 @@ impl AgilulfClient {
     }
 }
 
+/// A multi-thread client.
+///
+/// A multi-thread client will open several single-thread clients (called knight) and give them an ID. Any request
+/// will be hashed by key and send to corresponding client. As it is a KV server, just keeping operation
+/// order consistent of the same key is enough. **Note**: `SCAN` is different, this method will
+/// affect multiple keys. Guard (just like CPU's Memory Guard) is needed for this operation. Some
+/// strategy can be choosed:
+///
+/// 1. Any request related before `SCAN` should have finished, then `SCAN`, then following requests.
+///
+/// 2. Allocate all requests related with `SCAN` into the same knight, then the order is consistent
+/// natually
+///
 #[derive(Clone)]
 pub struct MultiAgilulfClient {
     knights: Arc<Vec<AgilulfClient>>,

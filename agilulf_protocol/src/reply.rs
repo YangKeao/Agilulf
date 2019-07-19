@@ -129,6 +129,9 @@ async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Resul
 
 impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
     /// Convert a `AsyncReadBuffer` into `Stream<Item = Result<Reply>>`.
+    ///
+    /// The implementation of it is use `futures::stream::unfold" and every time it will read one reply
+    /// on this stream (with the help of `read_exact` and `read_line`)
     pub fn into_reply_stream(self) -> impl Stream<Item = Result<Reply>> {
         futures::stream::unfold(self, |mut buffer| {
             let future = async move {
@@ -142,6 +145,9 @@ impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
 
 impl<T: AsyncWrite + Unpin + 'static> AsyncWriteBuffer<T> {
     /// Convert a `AsyncWriteBuffer` into `Sink<Reply, Error = ProtocolError>`.
+    ///
+    /// **Note**: Actually ProtocolError should be returned to client. So convert the ProtocolError
+    /// into Reply before sending them into this Sink.
     pub fn into_reply_sink(self) -> impl Sink<Reply, Error = ProtocolError> {
         self.stream.into_sink().with(|reply: Reply| {
             let reply: Vec<u8> = reply.into();
