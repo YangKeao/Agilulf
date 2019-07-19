@@ -17,6 +17,19 @@ use crate::storage::AsyncDatabase;
 use agilulf_protocol::Command;
 use std::sync::Arc;
 
+/// A simple TCP server constructed by a foreign database with the help of `agilulf_protocol`
+///
+/// Most of it's coded are neccesary and template. There isn't much logic code in this mod:
+///
+/// First, set up a romio TCP server and spawn every connection on a ThreadPool.
+///
+/// For every connection, convert the Incoming stream into command stream and send the command to
+/// database. Then read reply from database (actually not read, it is just function return). Send the
+/// reply to reply sink (converted from outcoming sink)
+///
+/// This struct just assemble the protocol and database together. With this template, implement a
+/// KV server on another transimission layer is quite the same. Just replace the romio TCP server with
+/// other asynchronous server and most codes are same.
 pub struct Server {
     listener: TcpListener,
     database: Arc<dyn AsyncDatabase>,
@@ -33,6 +46,8 @@ impl Server {
         })
     }
 
+    /// `run_async` is provided as a seperated function. Becasue you may want to run on a ThreadPool
+    /// or any other executor. I don't want to limit the executor choice.
     pub async fn run_async(mut self) -> Result<()> {
         let mut thread_pool = ThreadPool::new()?;
 
@@ -51,6 +66,7 @@ impl Server {
         Ok(())
     }
 
+    /// This function use `futures::executor::block_on` to run method `run_async`
     pub fn run(self) -> Result<()> {
         executor::block_on(async { self.run_async().await })?;
 

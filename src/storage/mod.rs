@@ -14,6 +14,7 @@ use std::pin::Pin;
 
 pub use database::{Database, DatabaseBuilder};
 
+/// Abstraction layer for a SyncDatabase. Every method should return directly.
 pub trait SyncDatabase: Send + Sync {
     fn get_sync(&self, key: Slice) -> Result<Slice>;
 
@@ -24,6 +25,10 @@ pub trait SyncDatabase: Send + Sync {
     fn delete_sync(&self, key: Slice) -> Result<()>;
 }
 
+/// Abstraction layer for a AsyncDatabase. Every method return a Future.
+///
+/// The return type of these function are fixed as `Pin<Box<dyn Future<Output = Result<_>> + Send + '_>>`
+/// rather than a generic type for convenience.
 pub trait AsyncDatabase: Send + Sync {
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<Slice>> + Send + '_>>;
 
@@ -33,6 +38,7 @@ pub trait AsyncDatabase: Send + Sync {
         value: Slice,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>>;
 
+    /// SCAN don't return a `Result` because if nothing is found, an empty vector will be returned.
     fn scan(
         &self,
         start: Slice,
@@ -42,6 +48,8 @@ pub trait AsyncDatabase: Send + Sync {
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<()>> + Send + '_>>;
 }
 
+/// Every sync database can be wrapped as an async database easily. With this wrapper, MemDatabase can
+/// be used directly on Server.
 impl<T: SyncDatabase> AsyncDatabase for T {
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = Result<Slice>> + Send + '_>> {
         Box::pin(async move { self.get_sync(key) })

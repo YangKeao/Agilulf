@@ -18,6 +18,24 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+/// Database factory, which can be used in order to configure the properties of a new database.
+///
+/// Methods can be chained on it in order to configure it.
+///
+/// The two configurations available are:
+///
+/// * [restore](#method.restore): chooese whether restore from previous existing log. The default value
+/// is `true`.
+///
+/// * [base_dir](#method.base_dir): choose where the base directory is. Base directory is used to store
+/// log, MANIFEST and SSTables. The default value of base_dir is `/var/tmp/agilulf`.
+///
+/// # Example
+///
+/// ```
+/// # use crate::agilulf::DatabaseBuilder;
+/// let database = DatabaseBuilder::default().restore(false).build().unwrap();
+/// ```
 pub struct DatabaseBuilder {
     base_dir: String,
     restore: bool,
@@ -87,6 +105,10 @@ impl DatabaseBuilder {
     }
 }
 
+/// A Database with LevelDB algorithm. (Though the compaction of sstable is not implemented yet)
+///
+/// Now it will freeze exceeded MemDatabase into frozen_databases list. Then a background thread will
+/// write the frozen database into disk and modify the MANIFEST.
 pub struct Database {
     frozen_databases: Arc<ShardedLock<VecDeque<Arc<MemDatabase>>>>,
     mem_database: ShardedLock<Arc<MemDatabase>>,
@@ -145,6 +167,8 @@ impl Database {
 }
 
 impl AsyncDatabase for Database {
+    /// GET request for the database will firstly read from MemDatabase. And then read from frozen database
+    /// . Then will find in SSTable. If they are all not found, error will be returned.
     fn get(&self, key: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<Slice>> + Send + '_>> {
         Box::pin(async move {
             let ret = self.mem_database.read().unwrap().get_sync(key.clone());
@@ -167,6 +191,8 @@ impl AsyncDatabase for Database {
         })
     }
 
+    /// PUT request to this database will simply run PUT command on MemDatabase and check
+    /// whether MemDatabase is so big that needs to freeze.
     fn put(
         &self,
         key: Slice,
@@ -197,6 +223,8 @@ impl AsyncDatabase for Database {
         })
     }
 
+    /// SCAN operation will merge every iterator from MemDatabase and FrozenDatabase and SStable together
+    /// and return.
     fn scan(
         &self,
         start: Slice,
@@ -211,11 +239,13 @@ impl AsyncDatabase for Database {
                     .scan_sync(start, end)
                     .into_iter(),
             );
+            // TODO: Merge frozen_databases and sstables
 
             merge_iter(merge_vec).collect()
         })
     }
 
+    // Like PUT, delete will also check the MemDatabase size and may trigger a freeze.
     fn delete(&self, key: Slice) -> Pin<Box<dyn Future<Output = DatabaseResult<()>> + Send + '_>> {
         Box::pin(async move {
             match self.database_log.read().unwrap().delete_sync(key.clone()) {

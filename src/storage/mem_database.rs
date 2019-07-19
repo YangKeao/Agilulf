@@ -19,11 +19,16 @@ impl Default for Value {
     }
 }
 
+/// A simple RAM only database with skiplist as kernel.
+///
+/// The type of Value in skiplist is either NotExist (used for deleting element) or Slice.
 pub struct MemDatabase {
     inner: AtomicPtr<SkipMap<Value>>,
 }
 
 impl MemDatabase {
+    /// It can read from command iterator and run every command on MemDatabase. It is very useful for
+    /// restoring data from log.
     pub fn restore_from_iterator<I: Iterator<Item = Command>>(
         iter: I,
     ) -> StorageResult<MemDatabase> {
@@ -42,6 +47,8 @@ impl MemDatabase {
         Ok(mem_db)
     }
 
+    /// This function decide whether MemDatabase is too large. As every key and value is (256 + 8) bytes,
+    /// nearly 1MB is the threshold.
     pub fn large_enough(&self) -> bool {
         unsafe { (*self.inner.load(Ordering::SeqCst)).len() > 4 * 1024 }
     }
