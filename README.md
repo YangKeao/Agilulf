@@ -79,7 +79,7 @@ cargo run --example remote_benchmark --release -- --addr <ADDR>
 ```
 
 You can setup a server yourself and send requests to that server. The default addr is "127.0.0.1:3421" which
-is the same as default addr of Agilulf Server.
+is same with default addr of Agilulf Server.
 
 ## TODO
 
