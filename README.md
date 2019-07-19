@@ -34,7 +34,18 @@ cargo install agilulf
 agilulf_server --help
 ```
 
-You will know what you need.
+If you want to start a memory only server (like redis without persistence)
+
+```bash
+agilulf_server --mem --addr <ADDR>
+```
+
+If you need a server with data persistence on disk (with sstable and LSM tree structure. However, compaction
+is not implemented yet. So it is much slower after responding to much PUT requests)
+
+```bash
+agilulf_server --addr <ADDR>
+```
 
 ### Client
 
