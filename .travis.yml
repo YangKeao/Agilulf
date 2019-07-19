@@ -1,0 +1,26 @@
+sudo: false
+language: rust
+
+rust:
+  - nightly
+
+script:
+  - |
+    mkdir -p /var/tmp/agilulf
+    cargo build --all &&
+    cargo test --all &&
+    ulimit -n 4096 &&
+    cargo bench --all
+
+
+after_success:
+  - cargo doc --all --no-deps --all-features
+
+deploy:
+  provider: pages
+  skip_cleanup: true
+  github_token: $GITHUB_TOKEN
+  keep_history: true
+  local_dir: ./target/doc
+  on:
+    branch: gh-pages
