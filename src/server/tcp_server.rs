@@ -10,8 +10,8 @@ use romio::{TcpListener, TcpStream};
 use log::info;
 
 use super::error::Result;
-use agilulf_protocol::Result as ProtocolResult;
 use agilulf_protocol::{AsyncReadBuffer, AsyncWriteBuffer};
+use agilulf_protocol::{ProtocolError, Result as ProtocolResult};
 
 use crate::storage::AsyncDatabase;
 use agilulf_protocol::Command;
@@ -107,6 +107,15 @@ async fn handle_stream(stream: TcpStream, database: Arc<dyn AsyncDatabase>) -> R
     loop {
         let command = command_stream.select_next_some().await;
         if let Err(err) = process_sink.send(command).await {
+            match &err {
+                ProtocolError::IOError(err) => match err.kind() {
+                    std::io::ErrorKind::BrokenPipe => {
+                        break;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
             log::error!("Error while sending reply {:?}", err);
             break;
         }

@@ -1,11 +1,11 @@
 #![feature(async_await)]
 use agilulf_driver::MultiAgilulfClient;
 use agilulf_protocol::{Command, GetCommand, PutCommand, Reply, Slice};
+use clap::{App, Arg};
 use futures::executor::ThreadPool;
 use rand::distributions::Standard;
 use rand::{thread_rng, Rng};
 use std::time::{Duration, Instant};
-use clap::{App, Arg};
 
 fn generate_keys(num: usize) -> Vec<Vec<u8>> {
     (0..num)
