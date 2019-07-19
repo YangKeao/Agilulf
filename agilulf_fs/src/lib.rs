@@ -1,3 +1,11 @@
+//! An abstract layer for async write file.
+//!
+//! Tokio doesn't support latest async/await syntax in rust which is unbearable for this project (as
+//! this project is an experiment for writing projects with async/await syntax in rust). So I have to
+//! write an asynchronous file I/O library.
+//!
+//! The implementation of it is AIO so it supports Linux only.
+
 #![feature(async_await)]
 
 #[macro_use]
@@ -7,13 +15,14 @@ extern crate lazy_static;
 
 use nix::fcntl;
 use std::os::raw::c_int;
+use std::os::unix::io::FromRawFd;
 use std::pin::Pin;
 use std::sync::Once;
 use std::sync::RwLock;
 
 type RawFd = c_int;
 
-pub mod error;
+mod error;
 pub use error::{FSError, Result};
 use futures::task::{Context, Waker};
 use futures::{Future, Poll};
@@ -43,11 +52,41 @@ extern "C" fn handle_sig_io(_: i32, info: *mut libc::siginfo_t, _: *mut libc::c_
         .wake();
 }
 
+/// A struct contains only one fd.
+///
+/// As the constant style of Linux system call, aio accepts fd. And I cannot get a fd from `std::fs::File`.
+///
+/// ```ignore
+///pub struct File {
+///    fd: RawFd,
+///}
+/// ```
+///
+/// ## WARNING
+///
+/// 1. This struct will close the fd automatically when it's dropped.
+///
+/// 2. Open file with this struct will take over the SIGIO signal. AIO will send a SIGIO signal with
+/// request id to this process and then this library will lookup `WAKER_LIST` and find the waker
+/// corresponding to this id. Then it will wake that task.
+///
 pub struct File {
-    pub fd: RawFd,
+    fd: RawFd,
+}
+
+impl Drop for File {
+    fn drop(&mut self) {
+        unsafe {
+            std::fs::File::from_raw_fd(self.fd.clone());
+        }
+    }
 }
 
 impl File {
+    /// Open file from given path.
+    ///
+    /// The oflag in this function is set as `O_RDWR | O_CREAT`. And the mode is set as `S_IRUSR|S_IWUSR`.
+    /// While opening the first file, it will take over the SIGIO signal (by set it's handler).
     pub fn open(path: &str) -> Result<Self> {
         use fcntl::OFlag;
         use nix::sys::stat::Mode;
@@ -73,6 +112,7 @@ impl File {
         Ok(File { fd })
     }
 
+    /// Write buffer into file with aio.
     //noinspection RsTypeCheck
     pub fn write<'a>(&self, offset: i64, buf: &'a [u8]) -> WriteFile<'a> {
         let aio_cb = AioCb::from_slice(
@@ -90,6 +130,7 @@ impl File {
         }
     }
 
+    /// fallocate the file.
     //noinspection RsTypeCheck
     pub fn fallocate(&self, offset: i64, len: i64) -> Result<()> {
         fcntl::fallocate(self.fd, fcntl::FallocateFlags::empty(), offset, len)?;
@@ -98,6 +139,11 @@ impl File {
     }
 }
 
+/// A Future represents a write task.
+///
+/// It's the return value of the write method of a File. When it's polled the first time, it will
+/// clone the waker and add the waker to `WAKER_LIST` and set `aio_cb.sigev_notify` with SIGIO signal
+/// and set `aio_cb.sigev_notify.si_value` with the index of its waker in `WAKER_LIST`.
 pub struct WriteFile<'a> {
     aio_cb: AioCb<'a>,
     register: AtomicUsize,

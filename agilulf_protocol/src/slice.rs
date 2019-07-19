@@ -2,6 +2,24 @@ use std::cmp::Ordering;
 
 use libc::memcmp;
 
+/// In the most time of this project, the key or value will be represented by a so called Slice (actually
+/// not a slice but a `Vec<u8>`).
+///
+/// It is not a good design (for both egineering and efficiency). But it's a compromise between programming
+/// efficiency and runtime efficiency.
+///
+/// Good Part:
+///
+/// It avoids the battle with lifetime. With Future and async/await used in this project, complicated
+/// lifetime should be avoided at most time. Or I will fall into the blackhole of lifetime contradiction.
+///
+/// Bad Part:
+///
+/// When facing the low level operation, or the memory is gotten from mmap, using vector may lead to
+/// unexpected error. One of them is unexpected `free()`. While dropping a vector, it will automatically
+/// free the memory owned by it. However, if I use `from_raw_parts` and make up a vector from memmap
+/// memory, it will drop this memmaped memory and lead to a panic.
+///
 #[derive(Clone, Eq, Debug)]
 pub struct Slice(pub Vec<u8>);
 

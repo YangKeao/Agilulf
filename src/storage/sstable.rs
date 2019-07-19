@@ -1,6 +1,6 @@
 use super::{mem_database::MemDatabase, SyncDatabase};
-use agilulf_protocol::error::database_error::{DatabaseError, Result};
 use agilulf_protocol::Slice;
+use agilulf_protocol::{DatabaseError, DatabaseResult as Result};
 use memmap::MmapOptions;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
@@ -166,7 +166,7 @@ impl Index<usize> for SliceMmap {
 quick_error! {
     #[derive(Debug)]
     pub enum SSTableError {
-        FsError(err: agilulf_fs::error::FSError) {
+        FsError(err: agilulf_fs::FSError) {
             from()
         }
         IoError(err: std::io::Error) {

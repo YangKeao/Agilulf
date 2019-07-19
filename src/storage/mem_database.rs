@@ -1,5 +1,5 @@
 use super::{Slice, SyncDatabase};
-use agilulf_protocol::error::database_error::{DatabaseError, Result};
+use agilulf_protocol::{DatabaseError, DatabaseResult as Result};
 
 use crate::storage::error::StorageResult;
 use agilulf_protocol::Command;

@@ -5,8 +5,8 @@ use super::mem_database::MemDatabase;
 use super::merge::merge_iter;
 use super::{AsyncDatabase, SyncDatabase};
 
-use agilulf_protocol::error::database_error::{DatabaseError, Result as DatabaseResult};
 use agilulf_protocol::Slice;
+use agilulf_protocol::{DatabaseError, DatabaseResult};
 
 use crossbeam::sync::ShardedLock;
 use futures::channel::mpsc::UnboundedSender;

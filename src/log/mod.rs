@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 quick_error! {
     #[derive(Debug)]
     pub enum LogError {
-        FSError(err: agilulf_fs::error::FSError) {
+        FSError(err: agilulf_fs::FSError) {
             from()
         }
         IOError(err: std::io::Error) {

@@ -122,6 +122,7 @@ async fn read_reply<T: AsyncRead + Unpin>(buf: &mut AsyncReadBuffer<T>) -> Resul
 }
 
 impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
+    /// Convert a `AsyncReadBuffer` into `Stream<Item = Result<Reply>>`.
     pub fn into_reply_stream(self) -> impl Stream<Item = Result<Reply>> {
         futures::stream::unfold(self, |mut buffer| {
             let future = async move {
@@ -134,7 +135,9 @@ impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
 }
 
 impl<T: AsyncWrite + Unpin + 'static> AsyncWriteBuffer<T> {
+    /// Convert a `AsyncWriteBuffer` into `Sink<Reply, Error = ProtocolError>`.
     pub fn into_reply_sink(self) -> impl Sink<Reply, Error = ProtocolError> {
+        // TODO: make up a new Error. ProtocolError should be returned to client.
         self.stream.into_sink().with(|reply: Reply| {
             let reply: Vec<u8> = reply.into();
             futures::future::ready(Result::Ok(reply))

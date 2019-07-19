@@ -3,7 +3,7 @@ use super::{AsyncReadBuffer, ProtocolError, Result, Slice};
 
 use futures::{AsyncRead, Stream};
 
-pub async fn read_message<T: AsyncRead + Unpin>(
+async fn read_message<T: AsyncRead + Unpin>(
     buf: &mut AsyncReadBuffer<T>,
 ) -> Result<Vec<Vec<u8>>> {
     let mut message = Vec::new();
@@ -158,6 +158,7 @@ impl Into<Vec<u8>> for Command {
 }
 
 impl<T: AsyncRead + Unpin + 'static> AsyncReadBuffer<T> {
+    /// Convert a `AsyncReadBuffer` into `Stream<Item = Result<Command>>`.
     pub fn into_command_stream(self) -> impl Stream<Item = Result<Command>> {
         futures::stream::unfold(self, |mut buffer| {
             let future = async move {

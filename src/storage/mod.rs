@@ -8,7 +8,7 @@ mod sstable;
 
 use agilulf_protocol::Slice;
 
-use agilulf_protocol::error::database_error::Result;
+use agilulf_protocol::DatabaseResult as Result;
 use futures::Future;
 use std::pin::Pin;
 

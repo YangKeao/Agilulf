@@ -4,6 +4,12 @@ use futures::{AsyncRead, AsyncWrite};
 
 pub const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
+/// A Read buffer to provide `read_exact` and `read_line` methods.
+///
+/// Amazingly there isn't an `AsyncBuffer` for latest futures! The implementation of this struct is
+/// similar with `BufferReader` in std. The implementation of `read_exact` and `read_line` learns
+/// from `BufferRead` trait in std.
+///
 pub struct AsyncReadBuffer<T: AsyncRead + Unpin> {
     stream: T,
     read_buffer: Vec<u8>,
@@ -39,6 +45,10 @@ impl<T: AsyncRead + Unpin> AsyncReadBuffer<T> {
         self.read_pos = std::cmp::min(self.read_pos + amt, self.read_cap);
     }
 
+    /// **Note:** The return value of this method contains "\r\n".
+    ///
+    /// This method will find "\n" and check whether the former one byte is "\r". If it is, it will be
+    /// consumed and return.
     pub async fn read_line(&mut self) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
@@ -93,6 +103,9 @@ impl<T: AsyncRead + Unpin> AsyncReadBuffer<T> {
     }
 }
 
+/// Actually this struct doesn't have any buffer. It's only a wrapper for `AsyncWrite`
+///
+/// It's only used for implementing methods on stream.
 pub struct AsyncWriteBuffer<T: AsyncWrite + Unpin> {
     pub stream: T,
 }

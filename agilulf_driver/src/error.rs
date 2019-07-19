@@ -7,7 +7,7 @@ quick_error! {
         ConnectError(err: std::io::Error) {
             from()
         }
-        ProtocolError(err: agilulf_protocol::error::protocol_error::ProtocolError) {
+        ProtocolError(err: agilulf_protocol::ProtocolError) {
             from()
         }
     }

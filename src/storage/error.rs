@@ -1,6 +1,6 @@
 use super::sstable::SSTableError;
 use crate::log::LogError;
-use agilulf_protocol::error::database_error::DatabaseError;
+use agilulf_protocol::DatabaseError;
 
 quick_error! {
     #[derive(Debug)]
