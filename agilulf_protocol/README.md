@@ -1,5 +1,18 @@
 # Agilulf KV Protocol
 
+<a href="https://travis-ci.com/YangKeao/Agilulf">
+  <img alt="Build Status" src="https://travis-ci.com/YangKeao/Agilulf.svg?branch=master">
+</a>
+
+<a href="https://crates.io/crates/agilulf_protocol">
+  <img alt="Crates.io" src="https://img.shields.io/crates/v/agilulf_protocol.svg">
+</a>
+
+<a href="https://yangkeao.github.io/Agilulf/agilulf_protocol/">
+  <img alt="Docs" src="https://img.shields.io/badge/docs-current-success.svg">
+</a>
+  
+
 The design of this protocol learns from [Redis Protocol](https://redis.io/topics/protocol). But as 
 this KV server doesn't provide such complicated data structure, the protocol is much simpler.
 

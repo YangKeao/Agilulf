@@ -14,9 +14,15 @@
   <a href="https://crates.io/crates/agilulf">
     <img alt="Crates.io" src="https://img.shields.io/crates/v/agilulf.svg">
   </a>
+  
+  <a href="https://yangkeao.github.io/Agilulf/agilulf/">
+    <img alt="Docs" src="https://img.shields.io/badge/docs-current-success.svg">
+  </a>
 </p>
 
 ## Usage
+
+Detail about the protocol can be found in [documents about protocol](https://github.com/YangKeao/Agilulf/tree/master/agilulf_protocol).
 
 ### Server
 
